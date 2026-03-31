@@ -378,7 +378,88 @@
       }
     }
 
-    function renderResult(r) { console.log('renderResult — stub', r); }
+    function renderResult(r) {
+      // Confidence banner
+      const banner = document.getElementById('confidence-banner');
+      if (r.confidence === 'low') {
+        banner.textContent = 'Low confidence — footage may be too dark or unclear. Try again with better lighting.';
+        banner.className   = 'confidence-banner confidence-low';
+        banner.classList.remove('hidden');
+      } else if (r.confidence === 'high') {
+        banner.textContent = 'High confidence diagnosis';
+        banner.className   = 'confidence-banner confidence-high';
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+
+      // Diagnosis + cause — safe textContent only
+      document.getElementById('result-diagnosis').textContent = r.diagnosis    ?? '—';
+      document.getElementById('result-cause').textContent     = r.likely_cause ?? '—';
+
+      // Action plan — built with DOM methods, no innerHTML
+      const stepsEl = document.getElementById('result-steps');
+      stepsEl.replaceChildren();
+      (r.action_plan ?? []).slice(0, 5).forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'step-row';
+
+        const num = document.createElement('span');
+        num.className   = 'step-num';
+        num.textContent = String(item.step);
+        row.appendChild(num);
+
+        const body = document.createElement('div');
+        body.style.flex = '1';
+
+        const action = document.createElement('div');
+        action.textContent = item.action;
+        body.appendChild(action);
+
+        if (item.tools_required?.length > 0) {
+          const tools = document.createElement('div');
+          tools.className = 'tools';
+          item.tools_required.forEach(t => {
+            const tag = document.createElement('span');
+            tag.className   = 'tool-tag';
+            tag.textContent = t;
+            tools.appendChild(tag);
+          });
+          body.appendChild(tools);
+        }
+
+        row.appendChild(body);
+        stepsEl.appendChild(row);
+      });
+
+      // Safety warnings
+      const warningsWrap = document.getElementById('result-warnings-wrap');
+      const warnings     = r.safety_warnings ?? [];
+      if (warnings.length > 0) {
+        const warningsEl = document.getElementById('result-warnings');
+        warningsEl.replaceChildren();
+        warnings.forEach(w => {
+          const tag = document.createElement('div');
+          tag.className   = 'warning-tag';
+          tag.textContent = '\u26a0 ' + w;
+          warningsEl.appendChild(tag);
+        });
+        warningsWrap.classList.remove('hidden');
+      } else {
+        warningsWrap.classList.add('hidden');
+      }
+
+      // Notes
+      const notesWrap = document.getElementById('result-notes-wrap');
+      if (r.notes?.trim()) {
+        document.getElementById('result-notes').textContent = r.notes;
+        notesWrap.classList.remove('hidden');
+      } else {
+        notesWrap.classList.add('hidden');
+      }
+
+      setState('result');
+    }
   </script>
 </body>
 </html>
