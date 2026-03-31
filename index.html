@@ -306,13 +306,10 @@
     }
 
     async function analyseRecording() {
-      // Guard: warn if no audio was captured and SpeechRecognition is supported
-      const hasSpeechSupport = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-      if (hasSpeechSupport && transcript.trim().length === 0) {
-        const proceed = confirm(
-          'No voice description detected. Diagnosis will use video frames only and may be less accurate. Continue anyway?'
-        );
-        if (!proceed) { setState('idle'); return; }
+      // Guard: abort if no frames were captured
+      if (extractedFrames.length === 0) {
+        showError('No frames captured. Try a longer recording.');
+        return;
       }
 
       const key = getApiKey();
@@ -383,13 +380,14 @@
       const banner = document.getElementById('confidence-banner');
       if (r.confidence === 'low') {
         banner.textContent = 'Low confidence — footage may be too dark or unclear. Try again with better lighting.';
-        banner.className   = 'confidence-banner confidence-low';
-        banner.classList.remove('hidden');
+        banner.classList.remove('confidence-high', 'hidden');
+        banner.classList.add('confidence-low');
       } else if (r.confidence === 'high') {
         banner.textContent = 'High confidence diagnosis';
-        banner.className   = 'confidence-banner confidence-high';
-        banner.classList.remove('hidden');
+        banner.classList.remove('confidence-low', 'hidden');
+        banner.classList.add('confidence-high');
       } else {
+        banner.classList.remove('confidence-low', 'confidence-high');
         banner.classList.add('hidden');
       }
 
