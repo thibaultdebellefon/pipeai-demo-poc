@@ -14,7 +14,12 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { frames, transcript } = req.body;
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('[diagnose] ANTHROPIC_API_KEY is not set');
+    return res.status(500).json({ error: 'Server misconfiguration' });
+  }
+
+  const { frames, transcript } = req.body ?? {};
 
   if (!Array.isArray(frames) || frames.length === 0) {
     return res.status(400).json({ error: 'At least one frame is required' });
@@ -32,21 +37,26 @@ export default async function handler(req, res) {
       : 'No spoken description provided — diagnose from the video frames only.'
   });
 
-  const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content }]
-    })
-  });
+  try {
+    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content }]
+      })
+    });
 
-  const data = await anthropicRes.json();
-  return res.status(anthropicRes.status).json(data);
+    const data = await anthropicRes.json();
+    return res.status(anthropicRes.status).json(data);
+  } catch (err) {
+    console.error('[diagnose] upstream error:', err);
+    return res.status(502).json({ error: 'Upstream request failed' });
+  }
 }
