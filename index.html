@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f172a">
   <title>PipeAI</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,6 +26,10 @@
     .state { display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%; max-width: 480px; }
     .state.active { display: flex; }
 
+    #state-result { overflow-y: auto; max-height: 100dvh; }
+
+    .hidden { display: none; }
+
     h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
     .subtitle { font-size: 0.9rem; color: #94a3b8; text-align: center; line-height: 1.5; }
 
@@ -36,6 +41,7 @@
       transition: opacity 0.15s;
     }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn:active { opacity: 0.75; }
     .btn-primary   { background: #3b82f6; color: white; }
     .btn-danger    { background: #ef4444; color: white; }
     .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
@@ -51,7 +57,7 @@
     #timer { font-size: 3rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #ef4444; }
 
     #preview {
-      width: 100%; max-height: 280px;
+      width: 100%; max-height: 280px; aspect-ratio: 16 / 9;
       border-radius: 12px; object-fit: cover; background: #000;
     }
 
@@ -116,7 +122,7 @@
 
   <!-- STATE: result -->
   <div id="state-result" class="state">
-    <div id="confidence-banner" class="confidence-banner" style="display:none"></div>
+    <div id="confidence-banner" class="confidence-banner hidden"></div>
     <div class="card">
       <div class="card-label">Diagnosis</div>
       <div id="result-diagnosis" class="card-value"></div>
@@ -129,11 +135,11 @@
       <div class="card-label">Action plan</div>
       <div id="result-steps"></div>
     </div>
-    <div id="result-warnings-wrap" class="card" style="display:none">
+    <div id="result-warnings-wrap" class="card hidden">
       <div class="card-label">Safety warnings</div>
       <div id="result-warnings"></div>
     </div>
-    <div id="result-notes-wrap" class="card" style="display:none">
+    <div id="result-notes-wrap" class="card hidden">
       <div class="card-label">Notes</div>
       <div id="result-notes" class="card-value"></div>
     </div>
