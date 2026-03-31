@@ -264,7 +264,7 @@
       mediaRecorder._frameInterval = frameInterval;
     }
 
-    // ── Stubs (filled in Tasks 4-8) ────────────────────────────────
+    // ── Recording control ──────────────────────────────────────────
     function stopRecording() {
       clearInterval(timerInterval);
       clearInterval(mediaRecorder._frameInterval);
@@ -447,7 +447,6 @@
     }
 
     document.getElementById('btn-mute').addEventListener('click', stopSpeaking);
-    document.getElementById('btn-restart').addEventListener('click', stopSpeaking);
   </script>
 </body>
 </html>
