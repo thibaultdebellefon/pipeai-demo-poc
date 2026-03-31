@@ -155,7 +155,39 @@
   </div>
 
   <script>
-    // App logic implemented in Tasks 2-9
+    // ── State machine ──────────────────────────────────────────────
+    const STATES = ['idle','recording','processing','result','error'];
+
+    function setState(name) {
+      STATES.forEach(s =>
+        document.getElementById('state-' + s).classList.toggle('active', s === name)
+      );
+    }
+
+    // ── API key handling ───────────────────────────────────────────
+    const apiKeyInput = document.getElementById('api-key');
+    const btnRecord   = document.getElementById('btn-record');
+    const keyHint     = document.getElementById('key-hint');
+
+    function getApiKey() { return apiKeyInput.value.trim(); }
+
+    apiKeyInput.addEventListener('input', () => {
+      const hasKey = getApiKey().length > 0;
+      btnRecord.disabled = !hasKey;
+      keyHint.style.display = hasKey ? 'none' : 'block';
+    });
+
+    keyHint.style.display = 'block'; // show on load
+
+    // ── Navigation ─────────────────────────────────────────────────
+    document.getElementById('btn-restart').addEventListener('click', () => setState('idle'));
+    document.getElementById('btn-retry').addEventListener('click',   () => setState('idle'));
+    document.getElementById('btn-record').addEventListener('click',  startRecording);
+    document.getElementById('btn-stop').addEventListener('click',    stopRecording);
+
+    // ── Stubs (filled in Tasks 3-8) ────────────────────────────────
+    function startRecording() { console.log('startRecording — stub'); }
+    function stopRecording()  { console.log('stopRecording — stub'); }
   </script>
 </body>
 </html>
