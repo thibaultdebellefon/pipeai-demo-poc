@@ -227,6 +227,23 @@
       mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) videoChunks.push(e.data); };
 
+      // Speech recognition (Chrome / Android; gracefully absent elsewhere)
+      const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognitionClass) {
+        const recogniser = new SpeechRecognitionClass();
+        recogniser.continuous     = true;
+        recogniser.interimResults = false;
+        recogniser.lang           = 'en-US';
+        recogniser.onresult = e => {
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) transcript += e.results[i][0].transcript + ' ';
+          }
+        };
+        recogniser.onerror = e => console.warn('Speech recognition error:', e.error);
+        recogniser.start();
+        mediaRecorder._recogniser = recogniser;
+      }
+
       // Timer
       recordingStart = Date.now();
       timerInterval = setInterval(() => {
