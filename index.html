@@ -185,6 +185,15 @@
     document.getElementById('btn-record').addEventListener('click',  startRecording);
     document.getElementById('btn-stop').addEventListener('click',    stopRecording);
 
+    // ── System prompt ─────────────────────────────────────────────────
+    const SYSTEM_PROMPT =
+      'You are an expert plumbing diagnostic assistant. ' +
+      'Analyse the provided video frames and spoken description to identify the issue, likely cause, and repair path. ' +
+      'Always respond with valid JSON only, no markdown fences, matching this schema exactly:\n' +
+      '{"diagnosis":"string","likely_cause":"string","action_plan":[{"step":1,"action":"string","tools_required":["string"]}],"safety_warnings":["string"],"confidence":"high|medium|low","notes":"string"}\n' +
+      'Cap action_plan at 5 steps. ' +
+      'If the footage is too dark or unclear to diagnose reliably, set confidence to "low" and explain in notes.';
+
     // ── Video & Media ─────────────────────────────────────────────────
     let mediaStream     = null;
     let mediaRecorder   = null;
@@ -296,9 +305,80 @@
       mediaRecorder.stop();
     }
 
-    function analyseRecording() {
-      console.log('analyseRecording — stub. Frames:', extractedFrames.length, 'Transcript:', transcript);
+    async function analyseRecording() {
+      // Guard: warn if no audio was captured and SpeechRecognition is supported
+      const hasSpeechSupport = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      if (hasSpeechSupport && transcript.trim().length === 0) {
+        const proceed = confirm(
+          'No voice description detected. Diagnosis will use video frames only and may be less accurate. Continue anyway?'
+        );
+        if (!proceed) { setState('idle'); return; }
+      }
+
+      const key = getApiKey();
+
+      // Build content: frames first, then spoken context as text
+      const content = extractedFrames.map(b64 => ({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: b64 }
+      }));
+
+      content.push({
+        type: 'text',
+        text: transcript.trim().length > 0
+          ? 'Spoken description from the plumber: ' + transcript.trim()
+          : 'No spoken description provided — diagnose from the video frames only.'
+      });
+
+      // 60-second timeout
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => {
+        controller.abort();
+        showError('This is taking longer than expected. Try again with a shorter recording.');
+      }, 60000);
+
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 1024,
+            system: SYSTEM_PROMPT,
+            messages: [{ role: 'user', content }]
+          })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (res.status === 401) { showError('Invalid API key. Check your Anthropic API key and try again.'); return; }
+        if (!res.ok)            { showError('Analysis failed (HTTP ' + res.status + '). Check your connection and try again.'); return; }
+
+        const data = await res.json();
+        const raw  = data.content?.[0]?.text ?? '';
+
+        let result;
+        try { result = JSON.parse(raw); }
+        catch { showError('Could not parse AI response. Try again.'); console.error('Raw response:', raw); return; }
+
+        renderResult(result);
+
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err.name !== 'AbortError') {
+          showError('Analysis failed. Check your connection and try again.');
+          console.error(err);
+        }
+      }
     }
+
+    function renderResult(r) { console.log('renderResult — stub', r); }
   </script>
 </body>
 </html>
