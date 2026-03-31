@@ -185,8 +185,35 @@
     document.getElementById('btn-record').addEventListener('click',  startRecording);
     document.getElementById('btn-stop').addEventListener('click',    stopRecording);
 
-    // ── Stubs (filled in Tasks 3-8) ────────────────────────────────
-    function startRecording() { console.log('startRecording — stub'); }
+    // ── Video & Media ─────────────────────────────────────────────────
+    let mediaStream = null;
+
+    async function startRecording() {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true
+        });
+        document.getElementById('preview').srcObject = mediaStream;
+        setState('recording');
+        beginCapture();
+      } catch (err) {
+        showError(
+          err.name === 'NotAllowedError'
+            ? 'Camera and microphone access required. Please allow access in your browser settings, then tap Try again.'
+            : 'Could not access camera: ' + err.message
+        );
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById('error-message').textContent = msg;
+      setState('error');
+    }
+
+    function beginCapture() { console.log('beginCapture — stub'); }
+
+    // ── Stubs (filled in Tasks 4-8) ────────────────────────────────
     function stopRecording()  { console.log('stopRecording — stub'); }
   </script>
 </body>
