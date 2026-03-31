@@ -1,0 +1,921 @@
+# PipeAI Phase 1 — Proof-of-Concept Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Build a single self-contained HTML file that lets a plumber record video + speak a description, then receive a structured AI diagnostic from Claude — validating that multimodal analysis works on real pipe footage.
+
+**Architecture:** One `index.html` file with inline CSS and JS. No build step, no npm, no framework. MediaRecorder captures video; a canvas extracts JPEG frames; `webkitSpeechRecognition` transcribes voice; the Anthropic Messages API returns a structured JSON diagnosis. State machine controls which UI panel is visible.
+
+**Tech Stack:** Vanilla HTML/CSS/JS · Browser MediaRecorder API · Browser SpeechRecognition API · Anthropic Messages API (`claude-sonnet-4-6`) · Canvas 2D for frame extraction
+
+---
+
+## Pre-conditions (do these before writing any code)
+
+- [ ] **Pre-1: Verify Claude API returns JSON reliably**
+
+Open `https://console.anthropic.com` and run this prompt against `claude-sonnet-4-6` in the Workbench:
+
+```
+System: You are an expert plumbing diagnostic assistant. Always respond with valid JSON only, no markdown fences, matching this schema exactly:
+{"diagnosis":"string","likely_cause":"string","action_plan":[{"step":1,"action":"string","tools_required":["string"]}],"safety_warnings":["string"],"confidence":"high|medium|low","notes":"string"}
+Cap action_plan at 5 steps.
+
+User: [Attach any photo of a pipe] I can see water dripping from a copper elbow joint under the sink.
+```
+
+Expected: raw JSON matching the schema. If Claude wraps it in markdown fences, add "Do not use markdown code fences." to the system prompt and retest. Note the exact system prompt wording that produces clean JSON — you will use it verbatim in Task 7.
+
+- [ ] **Pre-2: Test webkitSpeechRecognition on your target device**
+
+Open Chrome on Android (or Chrome on desktop as a proxy). In the browser console, run:
+
+```javascript
+const r = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+r.continuous = true;
+r.interimResults = false;
+r.lang = 'en-US';
+r.onresult = e => console.log('transcript:', e.results[0][0].transcript);
+r.onerror = e => console.error('speech error:', e.error);
+r.start();
+// Speak something. Expected: transcript logged to console within 3 seconds.
+```
+
+If `window.SpeechRecognition` and `window.webkitSpeechRecognition` are both undefined, the device does not support it. The app will still work — diagnosis proceeds on frames only.
+
+- [ ] **Pre-3: Test MediaRecorder on your target device**
+
+In the browser console on the target device:
+
+```javascript
+navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+  .then(stream => {
+    const mr = new MediaRecorder(stream);
+    const chunks = [];
+    mr.ondataavailable = e => chunks.push(e.data);
+    mr.onstop = () => console.log('blob size:', new Blob(chunks).size, 'type:', mr.mimeType);
+    mr.start();
+    setTimeout(() => mr.stop(), 3000);
+  })
+  .catch(e => console.error('getUserMedia failed:', e));
+```
+
+Expected: after 3 seconds, logs a blob with size > 0. On iOS Safari, if `blob.size` is 0 or an error is thrown, video recording is unavailable — add Task 11 (iOS fallback) before running the validation session.
+
+---
+
+## Task 1: HTML skeleton with all 5 UI states
+
+**Files:**
+- Create: `index.html`
+
+- [ ] **Step 1: Create index.html with the full HTML skeleton**
+
+Create `index.html`:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>PipeAI</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: max(24px, env(safe-area-inset-top))
+               max(24px, env(safe-area-inset-right))
+               max(24px, env(safe-area-inset-bottom))
+               max(24px, env(safe-area-inset-left));
+    }
+
+    .state { display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%; max-width: 480px; }
+    .state.active { display: flex; }
+
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { font-size: 0.9rem; color: #94a3b8; text-align: center; line-height: 1.5; }
+
+    .btn {
+      width: 100%; min-height: 56px; padding: 18px;
+      border: none; border-radius: 16px;
+      font-size: 1rem; font-weight: 600;
+      cursor: pointer; touch-action: manipulation;
+      transition: opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary   { background: #3b82f6; color: white; }
+    .btn-danger    { background: #ef4444; color: white; }
+    .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+
+    .api-input {
+      width: 100%; padding: 16px;
+      background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+      color: #f1f5f9; font-size: 0.85rem; font-family: monospace;
+    }
+    .api-input::placeholder { color: #64748b; }
+    .hint { font-size: 0.8rem; color: #f59e0b; text-align: center; }
+
+    #timer { font-size: 3rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #ef4444; }
+
+    #preview {
+      width: 100%; max-height: 280px;
+      border-radius: 12px; object-fit: cover; background: #000;
+    }
+
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #1e293b; border-top-color: #3b82f6;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .card {
+      width: 100%; background: #1e293b;
+      border-radius: 12px; padding: 16px; border: 1px solid #334155;
+    }
+    .card-label {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #64748b; margin-bottom: 8px;
+    }
+    .card-value { font-size: 0.95rem; line-height: 1.6; }
+
+    .step-row { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #0f172a; }
+    .step-row:last-child { border-bottom: none; }
+    .step-num { font-weight: 700; color: #3b82f6; min-width: 20px; }
+    .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .tool-tag {
+      background: #0f172a; border: 1px solid #334155;
+      border-radius: 6px; padding: 3px 8px; font-size: 0.75rem; color: #94a3b8;
+    }
+    .warning-tag { background: #7c2d12; border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; color: #fca5a5; margin-bottom: 8px; }
+
+    .confidence-banner { width: 100%; padding: 12px; border-radius: 10px; font-size: 0.85rem; font-weight: 500; text-align: center; }
+    .confidence-low  { background: #422006; color: #fbbf24; border: 1px solid #92400e; }
+    .confidence-high { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+
+    .error-box { background: #1c0a0a; border: 1px solid #7f1d1d; border-radius: 12px; padding: 20px; text-align: center; }
+    #error-message { color: #fca5a5; font-size: 0.95rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+  <!-- STATE: idle -->
+  <div id="state-idle" class="state active">
+    <h1>PipeAI</h1>
+    <p class="subtitle">Film the problem and describe it out loud.<br>AI will diagnose it in under 60 seconds.</p>
+    <input id="api-key" class="api-input" type="password" placeholder="Paste your Anthropic API key" autocomplete="off" spellcheck="false">
+    <p id="key-hint" class="hint">Paste your API key to continue.</p>
+    <button id="btn-record" class="btn btn-primary" disabled>Record</button>
+  </div>
+
+  <!-- STATE: recording -->
+  <div id="state-recording" class="state">
+    <div id="timer">0:00</div>
+    <video id="preview" autoplay muted playsinline></video>
+    <button id="btn-stop" class="btn btn-danger">Stop &amp; Analyse</button>
+  </div>
+
+  <!-- STATE: processing -->
+  <div id="state-processing" class="state">
+    <div class="spinner"></div>
+    <p class="subtitle">Analysing...<br>~30 seconds</p>
+  </div>
+
+  <!-- STATE: result -->
+  <div id="state-result" class="state">
+    <div id="confidence-banner" class="confidence-banner" style="display:none"></div>
+    <div class="card">
+      <div class="card-label">Diagnosis</div>
+      <div id="result-diagnosis" class="card-value"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Likely cause</div>
+      <div id="result-cause" class="card-value"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Action plan</div>
+      <div id="result-steps"></div>
+    </div>
+    <div id="result-warnings-wrap" class="card" style="display:none">
+      <div class="card-label">Safety warnings</div>
+      <div id="result-warnings"></div>
+    </div>
+    <div id="result-notes-wrap" class="card" style="display:none">
+      <div class="card-label">Notes</div>
+      <div id="result-notes" class="card-value"></div>
+    </div>
+    <button id="btn-restart" class="btn btn-secondary">Start over</button>
+  </div>
+
+  <!-- STATE: error -->
+  <div id="state-error" class="state">
+    <div class="error-box">
+      <div id="error-message"></div>
+    </div>
+    <button id="btn-retry" class="btn btn-primary">Try again</button>
+  </div>
+
+  <script>
+    // App logic implemented in Tasks 2-9
+  </script>
+</body>
+</html>
+```
+
+- [ ] **Step 2: Verify all states render correctly**
+
+Open `index.html` in Chrome. Only the idle state is visible. In the console:
+
+```javascript
+['idle','recording','processing','result','error'].forEach(name => {
+  document.querySelectorAll('.state').forEach(s => s.classList.remove('active'));
+  document.getElementById('state-' + name).classList.add('active');
+  console.log('Check state:', name);
+});
+document.querySelectorAll('.state').forEach(s => s.classList.remove('active'));
+document.getElementById('state-idle').classList.add('active');
+```
+
+Expected: each state appears in turn, returns to idle at the end.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git init  # if not already a git repo
+git add index.html
+git commit -m "feat: HTML skeleton with all 5 UI states"
+```
+
+---
+
+## Task 2: State machine + API key validation
+
+**Files:**
+- Modify: `index.html` (replace `<script>` block)
+
+- [ ] **Step 1: Implement the state machine and API key guard**
+
+Replace the `<script>` block:
+
+```javascript
+// ── State machine ──────────────────────────────────────────────
+const STATES = ['idle','recording','processing','result','error'];
+
+function setState(name) {
+  STATES.forEach(s =>
+    document.getElementById('state-' + s).classList.toggle('active', s === name)
+  );
+}
+
+// ── API key handling ───────────────────────────────────────────
+const apiKeyInput = document.getElementById('api-key');
+const btnRecord   = document.getElementById('btn-record');
+const keyHint     = document.getElementById('key-hint');
+
+function getApiKey() { return apiKeyInput.value.trim(); }
+
+apiKeyInput.addEventListener('input', () => {
+  const hasKey = getApiKey().length > 0;
+  btnRecord.disabled = !hasKey;
+  keyHint.style.display = hasKey ? 'none' : 'block';
+});
+
+keyHint.style.display = 'block'; // show on load
+
+// ── Navigation ─────────────────────────────────────────────────
+document.getElementById('btn-restart').addEventListener('click', () => setState('idle'));
+document.getElementById('btn-retry').addEventListener('click',   () => setState('idle'));
+document.getElementById('btn-record').addEventListener('click',  startRecording);
+document.getElementById('btn-stop').addEventListener('click',    stopRecording);
+
+// ── Stubs (filled in Tasks 3-8) ────────────────────────────────
+function startRecording() { console.log('startRecording — stub'); }
+function stopRecording()  { console.log('stopRecording — stub'); }
+```
+
+- [ ] **Step 2: Verify API key guard**
+
+```javascript
+console.assert(document.getElementById('btn-record').disabled === true, 'FAIL: button should be disabled on empty key');
+document.getElementById('api-key').value = 'sk-ant-test';
+document.getElementById('api-key').dispatchEvent(new Event('input'));
+console.assert(document.getElementById('btn-record').disabled === false, 'FAIL: button should enable when key present');
+console.log('API key guard: PASS');
+```
+
+Expected: "API key guard: PASS" in console.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add index.html
+git commit -m "feat: state machine and API key guard"
+```
+
+---
+
+## Task 3: Camera access + video preview
+
+**Files:**
+- Modify: `index.html`
+
+- [ ] **Step 1: Implement camera initialisation and permission error handling**
+
+Replace the `startRecording` stub:
+
+```javascript
+let mediaStream = null;
+
+async function startRecording() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: true
+    });
+    document.getElementById('preview').srcObject = mediaStream;
+    setState('recording');
+    beginCapture();
+  } catch (err) {
+    showError(
+      err.name === 'NotAllowedError'
+        ? 'Camera and microphone access required. Please allow access in your browser settings, then tap Try again.'
+        : 'Could not access camera: ' + err.message
+    );
+  }
+}
+
+function showError(msg) {
+  document.getElementById('error-message').textContent = msg;
+  setState('error');
+}
+
+function beginCapture() { console.log('beginCapture — stub'); }
+```
+
+- [ ] **Step 2: Verify camera flow manually**
+
+Open `index.html` in Chrome, paste any text as API key, tap Record. Expected:
+- Allow permission → video preview appears, state is recording
+- Deny permission → error state with permission message
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add index.html
+git commit -m "feat: camera access and permission error handling"
+```
+
+---
+
+## Task 4: Recording, timer, and frame extraction
+
+**Files:**
+- Modify: `index.html`
+
+- [ ] **Step 1: Implement recording, timer, and frame extraction**
+
+Replace the `beginCapture` and `stopRecording` stubs:
+
+```javascript
+let mediaRecorder   = null;
+let videoChunks     = [];
+let extractedFrames = []; // array of raw base64 JPEG strings (no data-URI prefix)
+let timerInterval   = null;
+let recordingStart  = null;
+let transcript      = '';
+
+function beginCapture() {
+  videoChunks     = [];
+  extractedFrames = [];
+  transcript      = '';
+
+  // MediaRecorder for the video blob
+  const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+  mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) videoChunks.push(e.data); };
+
+  // Timer
+  recordingStart = Date.now();
+  timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - recordingStart) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = String(elapsed % 60).padStart(2, '0');
+    document.getElementById('timer').textContent = m + ':' + s;
+  }, 500);
+
+  // Frame extraction: 1 frame per 5 seconds, max 3 frames
+  const video  = document.getElementById('preview');
+  const canvas = document.createElement('canvas');
+  const ctx    = canvas.getContext('2d');
+
+  function extractFrame() {
+    if (extractedFrames.length >= 3) return;
+    const vw = video.videoWidth  || 1280;
+    const vh = video.videoHeight || 720;
+    // Resize so longest dimension does not exceed 1280px
+    const scale   = Math.min(1, 1280 / Math.max(vw, vh));
+    canvas.width  = Math.round(vw * scale);
+    canvas.height = Math.round(vh * scale);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    // Strip "data:image/jpeg;base64," — API needs raw base64
+    extractedFrames.push(dataUrl.slice(dataUrl.indexOf(',') + 1));
+    console.log('Frame', extractedFrames.length, '~', Math.round(dataUrl.length * 0.75 / 1024), 'KB');
+  }
+
+  setTimeout(extractFrame, 500); // first frame immediately
+  const frameInterval = setInterval(() => {
+    if (extractedFrames.length < 3) extractFrame(); else clearInterval(frameInterval);
+  }, 5000);
+
+  mediaRecorder.start(1000);
+  mediaRecorder._frameInterval = frameInterval;
+}
+
+function stopRecording() {
+  clearInterval(timerInterval);
+  clearInterval(mediaRecorder._frameInterval);
+  if (mediaRecorder._recogniser) mediaRecorder._recogniser.stop();
+
+  mediaRecorder.onstop = () => {
+    mediaStream.getTracks().forEach(t => t.stop());
+    setState('processing');
+    analyseRecording();
+  };
+  mediaRecorder.stop();
+}
+
+function analyseRecording() {
+  console.log('analyseRecording — stub. Frames:', extractedFrames.length, 'Transcript:', transcript);
+}
+```
+
+- [ ] **Step 2: Verify frame extraction**
+
+Open `index.html`, paste API key, tap Record. Wait 15 seconds. Console should show:
+
+```
+Frame 1 ~ 40 KB
+Frame 2 ~ 40 KB
+Frame 3 ~ 40 KB
+```
+
+Tap Stop. Console: `analyseRecording — stub. Frames: 3 Transcript: `
+
+Also run:
+
+```javascript
+extractedFrames.forEach((f, i) => {
+  const kb = Math.round(f.length * 0.75 / 1024);
+  console.assert(kb < 500, 'Frame ' + (i+1) + ' too large: ' + kb + 'KB');
+  console.log('Frame', i+1, kb + 'KB — OK');
+});
+```
+
+Expected: all frames under 500KB.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add index.html
+git commit -m "feat: MediaRecorder, timer, and canvas frame extraction"
+```
+
+---
+
+## Task 5: Voice transcription
+
+**Files:**
+- Modify: `index.html`
+
+- [ ] **Step 1: Add SpeechRecognition to beginCapture**
+
+Add this block at the top of `beginCapture`, before the `// MediaRecorder` comment:
+
+```javascript
+  // Speech recognition (Chrome / Android; gracefully absent elsewhere)
+  const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRecognitionClass) {
+    const recogniser = new SpeechRecognitionClass();
+    recogniser.continuous     = true;
+    recogniser.interimResults = false;
+    recogniser.lang           = 'en-US';
+    recogniser.onresult = e => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) transcript += e.results[i][0].transcript + ' ';
+      }
+    };
+    recogniser.onerror = e => console.warn('Speech recognition error:', e.error);
+    recogniser.start();
+    mediaRecorder._recogniser = recogniser;
+  }
+```
+
+- [ ] **Step 2: Verify transcript capture**
+
+Open `index.html`. Paste API key. Tap Record. Speak for 10 seconds: "There is water dripping from the copper elbow joint under the bathroom sink." Tap Stop. In console:
+
+```javascript
+console.log('Transcript:', transcript);
+console.assert(transcript.length > 0, 'Transcript empty — SpeechRecognition may not be supported on this device');
+```
+
+Expected: transcript contains your spoken words. If empty with no error, the device does not support SpeechRecognition — diagnosis will use frames only; that is acceptable.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add index.html
+git commit -m "feat: speech recognition for voice transcription"
+```
+
+---
+
+## Task 6: Claude API call
+
+**Files:**
+- Modify: `index.html`
+
+- [ ] **Step 1: Define the system prompt constant**
+
+Add this constant near the top of the script block (before `beginCapture`). Use the exact wording you confirmed works in Pre-condition 1:
+
+```javascript
+const SYSTEM_PROMPT =
+  'You are an expert plumbing diagnostic assistant. ' +
+  'Analyse the provided video frames and spoken description to identify the issue, likely cause, and repair path. ' +
+  'Always respond with valid JSON only, no markdown fences, matching this schema exactly:\n' +
+  '{"diagnosis":"string","likely_cause":"string","action_plan":[{"step":1,"action":"string","tools_required":["string"]}],"safety_warnings":["string"],"confidence":"high|medium|low","notes":"string"}\n' +
+  'Cap action_plan at 5 steps. ' +
+  'If the footage is too dark or unclear to diagnose reliably, set confidence to "low" and explain in notes.';
+```
+
+- [ ] **Step 2: Replace the analyseRecording stub with the full API call**
+
+```javascript
+async function analyseRecording() {
+  // Guard: warn if no audio was captured and SpeechRecognition is supported
+  const hasSpeechSupport = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  if (hasSpeechSupport && transcript.trim().length === 0) {
+    const proceed = confirm(
+      'No voice description detected. Diagnosis will use video frames only and may be less accurate. Continue anyway?'
+    );
+    if (!proceed) { setState('idle'); return; }
+  }
+
+  const key = getApiKey();
+
+  // Build content: frames first, then spoken context as text
+  const content = extractedFrames.map(b64 => ({
+    type: 'image',
+    source: { type: 'base64', media_type: 'image/jpeg', data: b64 }
+  }));
+
+  content.push({
+    type: 'text',
+    text: transcript.trim().length > 0
+      ? 'Spoken description from the plumber: ' + transcript.trim()
+      : 'No spoken description provided — diagnose from the video frames only.'
+  });
+
+  // 60-second timeout
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => {
+    controller.abort();
+    showError('This is taking longer than expected. Try again with a shorter recording.');
+  }, 60000);
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content }]
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.status === 401) { showError('Invalid API key. Check your Anthropic API key and try again.'); return; }
+    if (!res.ok)            { showError('Analysis failed (HTTP ' + res.status + '). Check your connection and try again.'); return; }
+
+    const data = await res.json();
+    const raw  = data.content?.[0]?.text ?? '';
+
+    let result;
+    try { result = JSON.parse(raw); }
+    catch { showError('Could not parse AI response. Try again.'); console.error('Raw response:', raw); return; }
+
+    renderResult(result);
+
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name !== 'AbortError') {
+      showError('Analysis failed. Check your connection and try again.');
+      console.error(err);
+    }
+  }
+}
+
+function renderResult(r) { console.log('renderResult — stub', r); }
+```
+
+- [ ] **Step 3: Verify the API call end-to-end**
+
+Open `index.html` in Chrome. Paste your real Anthropic API key. Tap Record, film a pipe or any plumbing object, speak "There is a dripping joint under the sink." Tap Stop.
+
+Expected within 60 seconds: console logs `renderResult — stub` with the parsed JSON object. No CORS errors (the `anthropic-dangerous-direct-browser-access` header allows direct browser calls).
+
+If you get a CORS error: confirm the header is present exactly as written. If you get HTTP 400: check the frames array is not empty (`extractedFrames.length > 0`).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add index.html
+git commit -m "feat: Claude API call with frames and transcript"
+```
+
+---
+
+## Task 7: Result rendering
+
+**Files:**
+- Modify: `index.html`
+
+- [ ] **Step 1: Replace the renderResult stub**
+
+```javascript
+function renderResult(r) {
+  // Confidence banner
+  const banner = document.getElementById('confidence-banner');
+  if (r.confidence === 'low') {
+    banner.textContent = 'Low confidence — footage may be too dark or unclear. Try again with better lighting.';
+    banner.className   = 'confidence-banner confidence-low';
+    banner.style.display = 'block';
+  } else if (r.confidence === 'high') {
+    banner.textContent = 'High confidence diagnosis';
+    banner.className   = 'confidence-banner confidence-high';
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
+
+  // Diagnosis + cause — safe textContent only
+  document.getElementById('result-diagnosis').textContent = r.diagnosis     ?? '—';
+  document.getElementById('result-cause').textContent     = r.likely_cause  ?? '—';
+
+  // Action plan — built with DOM methods, no innerHTML
+  const stepsEl = document.getElementById('result-steps');
+  stepsEl.replaceChildren(); // clear safely
+  (r.action_plan ?? []).slice(0, 5).forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'step-row';
+
+    const num = document.createElement('span');
+    num.className   = 'step-num';
+    num.textContent = String(item.step);
+    row.appendChild(num);
+
+    const body   = document.createElement('div');
+    body.style.flex = '1';
+
+    const action = document.createElement('div');
+    action.textContent = item.action;
+    body.appendChild(action);
+
+    if (item.tools_required?.length > 0) {
+      const tools = document.createElement('div');
+      tools.className = 'tools';
+      item.tools_required.forEach(t => {
+        const tag = document.createElement('span');
+        tag.className   = 'tool-tag';
+        tag.textContent = t;
+        tools.appendChild(tag);
+      });
+      body.appendChild(tools);
+    }
+
+    row.appendChild(body);
+    stepsEl.appendChild(row);
+  });
+
+  // Safety warnings
+  const warningsWrap = document.getElementById('result-warnings-wrap');
+  const warnings     = r.safety_warnings ?? [];
+  if (warnings.length > 0) {
+    const warningsEl = document.getElementById('result-warnings');
+    warningsEl.replaceChildren(); // clear safely
+    warnings.forEach(w => {
+      const tag = document.createElement('div');
+      tag.className   = 'warning-tag';
+      tag.textContent = '\u26a0 ' + w;
+      warningsEl.appendChild(tag);
+    });
+    warningsWrap.style.display = 'block';
+  } else {
+    warningsWrap.style.display = 'none';
+  }
+
+  // Notes
+  const notesWrap = document.getElementById('result-notes-wrap');
+  if (r.notes?.trim()) {
+    document.getElementById('result-notes').textContent = r.notes;
+    notesWrap.style.display = 'block';
+  } else {
+    notesWrap.style.display = 'none';
+  }
+
+  setState('result');
+}
+```
+
+- [ ] **Step 2: Verify result rendering with mock data**
+
+In the browser console:
+
+```javascript
+renderResult({
+  diagnosis: "Leaking compression fitting on 15mm copper supply pipe",
+  likely_cause: "Compression nut has worked loose over time due to water hammer vibration",
+  action_plan: [
+    { step: 1, action: "Turn off the water supply at the isolation valve under the sink", tools_required: ["Flathead screwdriver"] },
+    { step: 2, action: "Place a bucket under the fitting to catch residual water", tools_required: ["Bucket"] },
+    { step: 3, action: "Hand-tighten the compression nut, then add 1/4 turn with a spanner", tools_required: ["Adjustable spanner"] },
+    { step: 4, action: "Turn the water supply back on slowly and check for leaks", tools_required: [] },
+    { step: 5, action: "If leak persists, replace the olive and compression nut", tools_required: ["Compression fitting kit", "PTFE tape"] }
+  ],
+  safety_warnings: ["Do not overtighten — this can crack the olive and worsen the leak"],
+  confidence: "high",
+  notes: "If the pipe itself is corroded, a full section replacement may be required."
+});
+```
+
+Expected: result state shows green banner, diagnosis card, 5 action steps with tool tags, 1 warning.
+
+Then test low confidence:
+
+```javascript
+renderResult({
+  diagnosis: "Possible leak at joint",
+  likely_cause: "Unknown — footage too dark to confirm",
+  action_plan: [{ step: 1, action: "Improve lighting and re-record for accurate diagnosis", tools_required: ["Torch / headlamp"] }],
+  safety_warnings: [],
+  confidence: "low",
+  notes: "The footage is too dark to identify pipe type or fitting."
+});
+```
+
+Expected: yellow "Low confidence" banner, no warnings section.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add index.html
+git commit -m "feat: result rendering with action plan, confidence banner, warnings"
+```
+
+---
+
+## Task 8: Mobile UX polish
+
+**Files:**
+- Modify: `index.html` (CSS only)
+
+- [ ] **Step 1: Add responsive and accessibility tweaks to the style block**
+
+Add inside `<style>`:
+
+```css
+@media (max-width: 400px) {
+  #timer { font-size: 2.5rem; }
+  .btn   { font-size: 0.95rem; padding: 16px; }
+}
+```
+
+- [ ] **Step 2: Manual mobile checklist**
+
+Serve the file locally and open on the target phone:
+
+```bash
+python3 -m http.server 8080
+# On the phone: navigate to http://<your-machine-ip>:8080
+```
+
+Check each item:
+
+- [ ] API key field is visible and tappable immediately on load
+- [ ] Record button activates after pasting key — no keyboard required beyond that
+- [ ] Tapping Record opens the camera facing outward (back camera)
+- [ ] Timer counts correctly
+- [ ] Stop button is large enough to tap one-handed without looking
+- [ ] Result cards are readable without zooming
+- [ ] "Start over" returns to idle cleanly
+- [ ] Entire flow works without a keyboard after the initial API key paste
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add index.html
+git commit -m "feat: mobile UX polish and responsive tweaks"
+```
+
+---
+
+## Task 9: End-to-end validation session
+
+This is a manual task — no code. It is the CEO demo from the spec's Validation Protocol.
+
+- [ ] **Step 1: Run the structured demo**
+
+Follow the Validation Protocol exactly:
+
+1. Hand the device to someone unfamiliar with the tool. Say only: "Film the problem and describe it out loud."
+2. Do not help them. Watch silently.
+3. Note every moment of hesitation or confusion.
+4. After the result appears, ask: "Would you put this in front of your team next week?"
+5. If yes, immediately ask: "What would you expect to pay per month per technician?"
+6. Record the answers.
+
+- [ ] **Step 2: Log the result in tasks/todo.md**
+
+```markdown
+## Phase 1 Validation Result
+
+Date: YYYY-MM-DD
+Tester: [name / role]
+Device: [e.g., iPhone 15 / Samsung Galaxy S24]
+
+Friction points observed:
+- [list anything the tester struggled with]
+
+CEO response to "would you use it":
+> [exact quote]
+
+CEO response to pricing question:
+> [exact quote or "did not ask"]
+
+PASS criteria: CEO says they'd use it AND names a price.
+Result: PASS / FAIL
+```
+
+- [ ] **Step 3: Decision gate**
+
+- **PASS:** Begin Phase 2 planning. Run `/office-hours` to scope the production React SPA.
+- **FAIL:** Diagnose the failure. Was it video quality? UX confusion? Wrong buyer? Log the root cause in `tasks/lessons.md` and identify which premise failed.
+
+---
+
+## Self-Review
+
+**Spec coverage:**
+
+| Spec requirement | Task |
+|---|---|
+| Single HTML file, no backend | Task 1 |
+| API key input, Record disabled until key present | Task 2 |
+| Camera/mic permission denied error | Task 3 |
+| MediaRecorder, 1 frame/5s, max 3 frames, max 1280px longest dim, JPEG 0.8 | Task 4 |
+| SpeechRecognition with graceful absence handling | Task 5 |
+| Claude API call, `claude-sonnet-4-6`, 60s timeout | Task 6 |
+| 401 invalid key error | Task 6 |
+| Network failure error | Task 6 |
+| Output schema: diagnosis, cause, action plan (max 5), warnings, notes | Task 7 |
+| Low-confidence yellow banner | Task 7 |
+| No-audio guard before API call | Task 6 (analyseRecording guard) |
+| One-handed gloved mobile UX, min 56px touch targets | Task 8 |
+| CEO validation protocol | Task 9 |
+
+**Gap (not a blocker):** iOS Safari fallback mode (photo + voice input) is specified in the design doc. If Pre-condition 3 reveals that iOS Safari cannot record video, add a Task 10 before running the validation session — implement the `<input type="file" capture="environment">` path with audio-only MediaRecorder.
+
+**Placeholder scan:** No TBD, TODO, or incomplete steps.
+
+**Type consistency:** `extractedFrames` is `string[]` (raw base64), `transcript` is `string`, `getApiKey()` returns `string`. All three are used consistently across Tasks 4-7.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+
+**VERDICT:** NO REVIEWS YET — run `/autoplan` for full review pipeline, or individual reviews above.
