@@ -360,6 +360,7 @@
         clearTimeout(timeoutId);
 
         if (res.status === 401) { showError('Invalid API key. Check your Anthropic API key and try again.'); return; }
+        if (res.status === 529) { showError('Anthropic API is overloaded right now. Wait a few seconds and try again.'); return; }
         if (!res.ok)            { showError('Analysis failed (HTTP ' + res.status + '). Check your connection and try again.'); return; }
 
         const data = await res.json();
