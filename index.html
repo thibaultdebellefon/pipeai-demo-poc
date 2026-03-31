@@ -148,6 +148,7 @@
       <div class="card-label">Notes</div>
       <div id="result-notes" class="card-value"></div>
     </div>
+    <button id="btn-mute" class="btn btn-secondary hidden">Stop speaking</button>
     <button id="btn-restart" class="btn btn-secondary">Start over</button>
   </div>
 
@@ -463,7 +464,48 @@
       }
 
       setState('result');
+      speakResult(r);
     }
+
+    // ── Text-to-speech ─────────────────────────────────────────────
+    function speakResult(r) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel(); // clear any leftover utterance
+
+      const steps = (r.action_plan ?? []).slice(0, 5)
+        .map(s => 'Step ' + s.step + ': ' + s.action)
+        .join('. ');
+
+      const warnings = (r.safety_warnings ?? []).length > 0
+        ? ' Safety warning: ' + r.safety_warnings.join('. ')
+        : '';
+
+      const text =
+        r.diagnosis + '. ' +
+        'The likely cause is: ' + r.likely_cause + '. ' +
+        'Here is your action plan. ' + steps + '.' +
+        warnings;
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang  = 'en-US';
+      utter.rate  = 0.95;
+
+      const muteBtn = document.getElementById('btn-mute');
+      muteBtn.classList.remove('hidden');
+
+      utter.onend = () => muteBtn.classList.add('hidden');
+      utter.onerror = () => muteBtn.classList.add('hidden');
+
+      window.speechSynthesis.speak(utter);
+    }
+
+    function stopSpeaking() {
+      window.speechSynthesis?.cancel();
+      document.getElementById('btn-mute').classList.add('hidden');
+    }
+
+    document.getElementById('btn-mute').addEventListener('click', stopSpeaking);
+    document.getElementById('btn-restart').addEventListener('click', stopSpeaking);
   </script>
 </body>
 </html>
