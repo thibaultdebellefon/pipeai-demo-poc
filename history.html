@@ -266,7 +266,7 @@
     async function loadHistory() {
       const list = document.getElementById('list');
 
-      const { data: diagnoses, error } = await supabase
+      const { data: diagnoses, error } = await sb
         .from('diagnoses')
         .select('*')
         .order('created_at', { ascending: false });
