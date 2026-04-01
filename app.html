@@ -61,6 +61,8 @@
     .btn-primary:hover { background: var(--accent-dark); }
     .btn-danger    { background: #ef4444; color: white; }
     .btn-secondary { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+    .btn-talk      { background: #1d4ed8; color: white; }
+    .btn-talk:hover { background: #1e40af; }
 
     #timer { font-size: 3rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #ef4444; }
 
@@ -103,31 +105,31 @@
     .error-box { background: #1c0a0a; border: 1px solid #7f1d1d; border-radius: 12px; padding: 20px; text-align: center; }
     #error-message { color: #fca5a5; font-size: 0.95rem; line-height: 1.5; }
 
-    @media (max-width: 400px) {
-      #timer { font-size: 2.5rem; }
-      .btn   { font-size: 0.95rem; padding: 16px; }
+    /* ── Voice UI ── */
+    .voice-dot {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--muted); transition: background 0.3s;
     }
+    .voice-dot.listening { background: #4ade80; animation: vpulse 1.4s ease-in-out infinite; }
+    .voice-dot.speaking  { background: var(--accent); animation: vpulse 0.7s ease-in-out infinite; }
+    @keyframes vpulse {
+      0%, 100% { transform: scale(1); }
+      50%       { transform: scale(1.5); }
+    }
+    .voice-label { font-size: 0.9rem; color: var(--muted); text-align: center; }
 
-    /* ── Voice conversation ── */
+    /* Voice panel in result state */
     .voice-panel {
       width: 100%; background: var(--surface);
       border: 1px solid var(--border); border-radius: 16px;
       padding: 20px; display: flex; flex-direction: column;
-      align-items: center; gap: 12px; text-align: center;
+      align-items: center; gap: 12px;
     }
-    .voice-dot {
-      width: 18px; height: 18px; border-radius: 50%;
-      background: var(--muted); transition: background 0.3s;
+
+    @media (max-width: 400px) {
+      #timer { font-size: 2.5rem; }
+      .btn   { font-size: 0.95rem; padding: 16px; }
     }
-    .voice-dot.listening  { background: #4ade80; animation: vpulse 1.4s ease-in-out infinite; }
-    .voice-dot.speaking   { background: var(--accent); animation: vpulse 0.7s ease-in-out infinite; }
-    @keyframes vpulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.5); }
-    }
-    .voice-label { font-size: 0.9rem; color: var(--muted); }
-    .btn-talk { background: #1d4ed8; color: white; }
-    .btn-talk:hover { background: #1e40af; }
   </style>
 </head>
 <body style="visibility:hidden">
@@ -153,6 +155,16 @@
     <p class="subtitle">Analysing...<br>~30 seconds</p>
   </div>
 
+  <!-- STATE: talking — AI speaks first, user can ask questions -->
+  <div id="state-talking" class="state">
+    <h1>PipeAI</h1>
+    <p class="subtitle">Your diagnosis is ready.<br>AI plumber is explaining the situation...</p>
+    <div id="talking-dot" class="voice-dot" style="width:32px;height:32px;margin:8px 0;"></div>
+    <div id="talking-label" class="voice-label" style="font-size:1rem;">Connecting...</div>
+    <p class="subtitle" style="font-size:0.8rem;margin-top:4px;">Ask any follow-up questions when ready.</p>
+    <button id="btn-end-talk" class="btn btn-primary" style="margin-top:8px;">View full diagnosis →</button>
+  </div>
+
   <!-- STATE: result -->
   <div id="state-result" class="state">
     <div id="confidence-banner" class="confidence-banner hidden"></div>
@@ -176,9 +188,8 @@
       <div class="card-label">Notes</div>
       <div id="result-notes" class="card-value"></div>
     </div>
-    <button id="btn-mute" class="btn btn-secondary hidden">Stop speaking</button>
+    <!-- Voice panel: only visible when a follow-up session is active -->
     <div id="voice-panel" class="voice-panel hidden">
-      <audio id="voice-audio" autoplay style="display:none"></audio>
       <div id="voice-dot" class="voice-dot"></div>
       <div id="voice-label" class="voice-label">Connecting...</div>
       <button id="btn-end-call" class="btn btn-danger">End conversation</button>
@@ -196,6 +207,9 @@
     <button id="btn-retry" class="btn btn-primary">Try again</button>
   </div>
 
+  <!-- Shared audio element for WebRTC output — lives outside states so it always plays -->
+  <audio id="voice-audio" autoplay style="display:none"></audio>
+
   <script>
     // ── Auth guard ────────────────────────────────────────────────
     const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -208,7 +222,7 @@
     })();
 
     // ── State machine ──────────────────────────────────────────────
-    const STATES = ['ready','recording','processing','result','error'];
+    const STATES = ['ready', 'recording', 'processing', 'talking', 'result', 'error'];
 
     function setState(name) {
       STATES.forEach(s =>
@@ -217,16 +231,19 @@
     }
 
     // ── Navigation ─────────────────────────────────────────────────
-    document.getElementById('btn-restart').addEventListener('click', () => { stopSpeaking(); endVoiceSession(); setState('ready'); });
+    document.getElementById('btn-restart').addEventListener('click', () => { endVoiceSession(false); setState('ready'); });
     document.getElementById('btn-retry').addEventListener('click',   () => setState('ready'));
     document.getElementById('btn-record').addEventListener('click',  startRecording);
     document.getElementById('btn-stop').addEventListener('click',    stopRecording);
+    document.getElementById('btn-end-talk').addEventListener('click', () => endVoiceSession(true));
+    document.getElementById('btn-talk').addEventListener('click',    () => { if (lastResult) startFollowUpVoice(lastResult); });
+    document.getElementById('btn-end-call').addEventListener('click', () => endVoiceSession(false));
 
     // ── Video & Media ─────────────────────────────────────────────────
     let mediaStream     = null;
     let mediaRecorder   = null;
     let videoChunks     = [];
-    let extractedFrames = []; // array of raw base64 JPEG strings (no data-URI prefix)
+    let extractedFrames = [];
     let timerInterval   = null;
     let recordingStart  = null;
     let transcript      = '';
@@ -262,12 +279,10 @@
       extractedFrames = [];
       transcript      = '';
 
-      // MediaRecorder for the video blob
       const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
       mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) videoChunks.push(e.data); };
 
-      // Speech recognition (Chrome / Android; gracefully absent elsewhere)
       const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognitionClass) {
         const recogniser = new SpeechRecognitionClass();
@@ -284,7 +299,6 @@
         mediaRecorder._recogniser = recogniser;
       }
 
-      // Timer
       recordingStart = Date.now();
       timerInterval = setInterval(() => {
         const elapsed = Math.floor((Date.now() - recordingStart) / 1000);
@@ -293,7 +307,6 @@
         document.getElementById('timer').textContent = m + ':' + s;
       }, 500);
 
-      // Frame extraction: 1 frame per 5 seconds, max 3 frames
       const video  = document.getElementById('preview');
       const canvas = document.createElement('canvas');
       const ctx    = canvas.getContext('2d');
@@ -302,18 +315,15 @@
         if (extractedFrames.length >= 3) return;
         const vw = video.videoWidth  || 1280;
         const vh = video.videoHeight || 720;
-        // Resize so longest dimension does not exceed 1280px
         const scale   = Math.min(1, 1280 / Math.max(vw, vh));
         canvas.width  = Math.round(vw * scale);
         canvas.height = Math.round(vh * scale);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        // Strip "data:image/jpeg;base64," — API needs raw base64
         extractedFrames.push(dataUrl.slice(dataUrl.indexOf(',') + 1));
-        console.log('Frame', extractedFrames.length, '~', Math.round(dataUrl.length * 0.75 / 1024), 'KB');
       }
 
-      setTimeout(extractFrame, 500); // first frame immediately
+      setTimeout(extractFrame, 500);
       const frameInterval = setInterval(() => {
         if (extractedFrames.length < 3) extractFrame(); else clearInterval(frameInterval);
       }, 5000);
@@ -337,13 +347,11 @@
     }
 
     async function analyseRecording() {
-      // Guard: abort if no frames were captured
       if (extractedFrames.length === 0) {
         showError('No frames captured. Try a longer recording.');
         return;
       }
 
-      // 60-second timeout
       const controller = new AbortController();
       const timeoutId  = setTimeout(() => {
         controller.abort();
@@ -371,8 +379,9 @@
         try { result = JSON.parse(raw); }
         catch { showError('Could not parse AI response. Try again.'); console.error('Raw response:', raw); return; }
 
-        renderResult(result);
-        saveDiagnosis(result, extractedFrames[0]);
+        lastResult = result;
+        saveDiagnosis(result, extractedFrames[0]); // save immediately, non-blocking
+        startAutoVoice(result);                    // go to talking state, AI speaks first
 
       } catch (err) {
         clearTimeout(timeoutId);
@@ -384,7 +393,6 @@
     }
 
     function renderResult(r) {
-      // Confidence banner
       const banner = document.getElementById('confidence-banner');
       if (r.confidence === 'low') {
         banner.textContent = 'Low confidence — footage may be too dark or unclear. Try again with better lighting.';
@@ -399,29 +407,23 @@
         banner.classList.add('hidden');
       }
 
-      // Diagnosis + cause — safe textContent only
       document.getElementById('result-diagnosis').textContent = r.diagnosis    ?? '—';
       document.getElementById('result-cause').textContent     = r.likely_cause ?? '—';
 
-      // Action plan — built with DOM methods, no innerHTML
       const stepsEl = document.getElementById('result-steps');
       stepsEl.replaceChildren();
       (r.action_plan ?? []).slice(0, 5).forEach(item => {
         const row = document.createElement('div');
         row.className = 'step-row';
-
         const num = document.createElement('span');
         num.className   = 'step-num';
         num.textContent = String(item.step);
         row.appendChild(num);
-
         const body = document.createElement('div');
         body.style.flex = '1';
-
         const action = document.createElement('div');
         action.textContent = item.action;
         body.appendChild(action);
-
         if (item.tools_required?.length > 0) {
           const tools = document.createElement('div');
           tools.className = 'tools';
@@ -433,12 +435,10 @@
           });
           body.appendChild(tools);
         }
-
         row.appendChild(body);
         stepsEl.appendChild(row);
       });
 
-      // Safety warnings
       const warningsWrap = document.getElementById('result-warnings-wrap');
       const warnings     = r.safety_warnings ?? [];
       if (warnings.length > 0) {
@@ -455,7 +455,6 @@
         warningsWrap.classList.add('hidden');
       }
 
-      // Notes
       const notesWrap = document.getElementById('result-notes-wrap');
       if (r.notes?.trim()) {
         document.getElementById('result-notes').textContent = r.notes;
@@ -464,125 +463,116 @@
         notesWrap.classList.add('hidden');
       }
 
-      lastResult = r;
+      // Reset voice panel state
+      document.getElementById('voice-panel').classList.add('hidden');
+      document.getElementById('btn-talk').classList.remove('hidden');
+
       setState('result');
-      speakResult(r);
     }
 
-    // ── Text-to-speech ─────────────────────────────────────────────
-    function speakResult(r) {
-      if (!window.speechSynthesis) return;
-      window.speechSynthesis.cancel(); // clear any leftover utterance
+    // ── Voice conversation ─────────────────────────────────────────
 
-      const steps = (r.action_plan ?? []).slice(0, 5)
-        .map(s => 'Step ' + s.step + ': ' + s.action)
-        .join('. ');
-
-      const warnings = (r.safety_warnings ?? []).length > 0
-        ? ' Safety warning: ' + r.safety_warnings.join('. ')
-        : '';
-
-      const text =
-        r.diagnosis + '. ' +
-        'The likely cause is: ' + r.likely_cause + '. ' +
-        'Here is your action plan. ' + steps + '.' +
-        warnings;
-
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang  = 'en-US';
-      utter.rate  = 0.95;
-
-      const muteBtn = document.getElementById('btn-mute');
-      muteBtn.classList.remove('hidden');
-
-      utter.onend = () => muteBtn.classList.add('hidden');
-      utter.onerror = () => muteBtn.classList.add('hidden');
-
-      window.speechSynthesis.speak(utter);
+    function buildSystemPrompt(r, speakFirst) {
+      const steps = (r.action_plan ?? []).map((s, i) => (i + 1) + '. ' + s.action).join('\n');
+      const warns = (r.safety_warnings ?? []).join(', ');
+      return (speakFirst
+        ? 'You are an expert plumbing diagnostic assistant on a voice call with a field plumber. ' +
+          'You just analysed their video. BEGIN IMMEDIATELY without waiting — greet them briefly, ' +
+          'then summarise the diagnosis in 2-3 clear conversational sentences. ' +
+          'Finish by telling them they can ask follow-up questions.\n\n'
+        : 'You are an expert plumbing diagnostic assistant on a voice call with a field plumber. ' +
+          'You already explained the diagnosis and they have follow-up questions. ' +
+          'Answer concisely and practically — you are on a job site.\n\n') +
+        'Diagnosis: ' + r.diagnosis + '\n' +
+        'Likely cause: ' + r.likely_cause + '\n' +
+        'Action plan:\n' + steps + '\n' +
+        (warns ? 'Safety warnings: ' + warns + '\n' : '') +
+        (r.notes ? 'Notes: ' + r.notes + '\n' : '');
     }
 
-    function stopSpeaking() {
-      window.speechSynthesis?.cancel();
-      document.getElementById('btn-mute').classList.add('hidden');
+    async function connectWebRTC(systemPrompt, onEvent) {
+      const tokenRes = await fetch('/api/realtime-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt })
+      });
+      if (!tokenRes.ok) throw new Error('Session request failed (' + tokenRes.status + ')');
+      const sessionData  = await tokenRes.json();
+      const ephemeralKey = sessionData.client_secret?.value;
+      if (!ephemeralKey) throw new Error('No ephemeral key');
+
+      voicePc = new RTCPeerConnection();
+      const audioEl = document.getElementById('voice-audio');
+      voicePc.ontrack = e => { audioEl.srcObject = e.streams[0]; };
+
+      voiceMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceMicStream.getTracks().forEach(t => voicePc.addTrack(t, voiceMicStream));
+
+      const dc = voicePc.createDataChannel('oai-events');
+      dc.onmessage = e => { try { onEvent(JSON.parse(e.data)); } catch (_) {} };
+
+      const offer = await voicePc.createOffer();
+      await voicePc.setLocalDescription(offer);
+
+      const sdpRes = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', {
+        method: 'POST',
+        body: offer.sdp,
+        headers: { Authorization: 'Bearer ' + ephemeralKey, 'Content-Type': 'application/sdp' }
+      });
+      if (!sdpRes.ok) throw new Error('WebRTC failed (' + sdpRes.status + ')');
+      await voicePc.setRemoteDescription({ type: 'answer', sdp: await sdpRes.text() });
     }
 
-    document.getElementById('btn-mute').addEventListener('click', stopSpeaking);
-    document.getElementById('btn-talk').addEventListener('click', () => { if (lastResult) startVoiceSession(lastResult); });
-    document.getElementById('btn-end-call').addEventListener('click', endVoiceSession);
+    // Called right after analysis — AI speaks the diagnosis first
+    async function startAutoVoice(r) {
+      setState('talking');
+      setTalkingState('connecting');
 
-    // ── Voice conversation (OpenAI Realtime) ──────────────────────
-    async function startVoiceSession(r) {
-      stopSpeaking();
-      const btnTalk   = document.getElementById('btn-talk');
-      const panel     = document.getElementById('voice-panel');
+      try {
+        await connectWebRTC(buildSystemPrompt(r, true), evt => {
+          if (evt.type === 'response.audio.delta')              setTalkingState('speaking');
+          else if (evt.type === 'response.done')                setTalkingState('listening');
+          else if (evt.type === 'input_audio_buffer.speech_started') setTalkingState('listening');
+        });
+        setTalkingState('speaking'); // AI will start speaking automatically
+      } catch (err) {
+        console.error('[voice auto]', err);
+        renderResult(r); // fallback: show text if voice fails
+      }
+    }
+
+    function setTalkingState(state) {
+      const dot   = document.getElementById('talking-dot');
+      const label = document.getElementById('talking-label');
+      dot.className = 'voice-dot ' + state;
+      if (state === 'connecting') label.textContent = 'Connecting...';
+      else if (state === 'speaking') label.textContent = 'AI is speaking...';
+      else if (state === 'listening') label.textContent = 'Listening — ask your question';
+    }
+
+    // Called from result state "Talk with AI" button — follow-up session
+    async function startFollowUpVoice(r) {
+      const btnTalk  = document.getElementById('btn-talk');
+      const panel    = document.getElementById('voice-panel');
       btnTalk.disabled    = true;
       btnTalk.textContent = 'Connecting...';
 
       try {
-        const steps = (r.action_plan ?? []).map((s, i) => (i + 1) + '. ' + s.action).join('\n');
-        const warns = (r.safety_warnings ?? []).join(', ');
-        const systemPrompt =
-          'You are an expert plumbing diagnostic assistant on a voice call with a field plumber. ' +
-          'You already analyzed their video and provided this diagnosis:\n\n' +
-          'Diagnosis: ' + r.diagnosis + '\n' +
-          'Likely cause: ' + r.likely_cause + '\n' +
-          'Action plan:\n' + steps + '\n' +
-          (warns ? 'Safety warnings: ' + warns + '\n' : '') +
-          (r.notes ? 'Notes: ' + r.notes + '\n' : '') +
-          '\nAnswer follow-up questions concisely and practically. ' +
-          'Keep responses brief and actionable — the plumber is on a job site.';
-
-        const tokenRes = await fetch('/api/realtime-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ systemPrompt })
+        await connectWebRTC(buildSystemPrompt(r, false), evt => {
+          if (evt.type === 'response.audio.delta')              setVoiceState('speaking');
+          else if (evt.type === 'response.done')                setVoiceState('listening');
+          else if (evt.type === 'input_audio_buffer.speech_started') setVoiceState('listening');
         });
-        if (!tokenRes.ok) throw new Error('Session request failed (' + tokenRes.status + ')');
-        const sessionData  = await tokenRes.json();
-        const ephemeralKey = sessionData.client_secret?.value;
-        if (!ephemeralKey) throw new Error('No ephemeral key in response');
-
-        voicePc = new RTCPeerConnection();
-
-        const audioEl = document.getElementById('voice-audio');
-        voicePc.ontrack = e => { audioEl.srcObject = e.streams[0]; };
-
-        voiceMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        voiceMicStream.getTracks().forEach(t => voicePc.addTrack(t, voiceMicStream));
-
-        const dc = voicePc.createDataChannel('oai-events');
-        dc.onmessage = e => {
-          try {
-            const evt = JSON.parse(e.data);
-            if (evt.type === 'response.audio.delta')             setVoiceState('speaking');
-            else if (evt.type === 'response.done')               setVoiceState('listening');
-            else if (evt.type === 'input_audio_buffer.speech_started') setVoiceState('listening');
-          } catch (_) {}
-        };
-
-        const offer = await voicePc.createOffer();
-        await voicePc.setLocalDescription(offer);
-
-        const sdpRes = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', {
-          method: 'POST',
-          body: offer.sdp,
-          headers: { Authorization: 'Bearer ' + ephemeralKey, 'Content-Type': 'application/sdp' }
-        });
-        if (!sdpRes.ok) throw new Error('WebRTC SDP exchange failed (' + sdpRes.status + ')');
-
-        await voicePc.setRemoteDescription({ type: 'answer', sdp: await sdpRes.text() });
-
         btnTalk.classList.add('hidden');
         btnTalk.disabled    = false;
         btnTalk.textContent = 'Talk with AI plumber →';
         panel.classList.remove('hidden');
         setVoiceState('listening');
-
       } catch (err) {
-        console.error('[voice]', err);
+        console.error('[voice follow-up]', err);
         btnTalk.disabled    = false;
         btnTalk.textContent = 'Talk with AI plumber →';
-        endVoiceSession();
+        endVoiceSession(false);
       }
     }
 
@@ -595,14 +585,22 @@
       else label.textContent = 'Connecting...';
     }
 
-    function endVoiceSession() {
+    // showResult=true → go to result screen after cleanup (from talking state)
+    // showResult=false → stay on result screen, just close voice (from result state)
+    function endVoiceSession(showResult) {
       if (voiceMicStream) { voiceMicStream.getTracks().forEach(t => t.stop()); voiceMicStream = null; }
       if (voicePc)        { voicePc.close(); voicePc = null; }
       const audioEl = document.getElementById('voice-audio');
       if (audioEl) audioEl.srcObject = null;
-      document.getElementById('voice-panel')?.classList.add('hidden');
-      const btn = document.getElementById('btn-talk');
-      if (btn) { btn.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Talk with AI plumber →'; }
+
+      if (showResult && lastResult) {
+        renderResult(lastResult);
+      } else {
+        // Reset voice panel in result state
+        document.getElementById('voice-panel')?.classList.add('hidden');
+        const btn = document.getElementById('btn-talk');
+        if (btn) { btn.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Talk with AI plumber →'; }
+      }
     }
 
     // ── Save diagnosis (silent, non-blocking) ─────────────────────
