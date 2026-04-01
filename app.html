@@ -107,6 +107,27 @@
       #timer { font-size: 2.5rem; }
       .btn   { font-size: 0.95rem; padding: 16px; }
     }
+
+    /* ── Voice conversation ── */
+    .voice-panel {
+      width: 100%; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 20px; display: flex; flex-direction: column;
+      align-items: center; gap: 12px; text-align: center;
+    }
+    .voice-dot {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--muted); transition: background 0.3s;
+    }
+    .voice-dot.listening  { background: #4ade80; animation: vpulse 1.4s ease-in-out infinite; }
+    .voice-dot.speaking   { background: var(--accent); animation: vpulse 0.7s ease-in-out infinite; }
+    @keyframes vpulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.5); }
+    }
+    .voice-label { font-size: 0.9rem; color: var(--muted); }
+    .btn-talk { background: #1d4ed8; color: white; }
+    .btn-talk:hover { background: #1e40af; }
   </style>
 </head>
 <body style="visibility:hidden">
@@ -156,8 +177,15 @@
       <div id="result-notes" class="card-value"></div>
     </div>
     <button id="btn-mute" class="btn btn-secondary hidden">Stop speaking</button>
+    <div id="voice-panel" class="voice-panel hidden">
+      <audio id="voice-audio" autoplay style="display:none"></audio>
+      <div id="voice-dot" class="voice-dot"></div>
+      <div id="voice-label" class="voice-label">Connecting...</div>
+      <button id="btn-end-call" class="btn btn-danger">End conversation</button>
+    </div>
+    <button id="btn-talk" class="btn btn-talk">Talk with AI plumber →</button>
     <button id="btn-restart" class="btn btn-secondary">New video</button>
-    <a href="account.html" class="btn btn-primary" style="text-align:center;text-decoration:none;">Go to profile →</a>
+    <a href="account.html" class="btn btn-secondary" style="text-align:center;text-decoration:none;">Go to profile →</a>
   </div>
 
   <!-- STATE: error -->
@@ -189,7 +217,7 @@
     }
 
     // ── Navigation ─────────────────────────────────────────────────
-    document.getElementById('btn-restart').addEventListener('click', () => { stopSpeaking(); setState('ready'); });
+    document.getElementById('btn-restart').addEventListener('click', () => { stopSpeaking(); endVoiceSession(); setState('ready'); });
     document.getElementById('btn-retry').addEventListener('click',   () => setState('ready'));
     document.getElementById('btn-record').addEventListener('click',  startRecording);
     document.getElementById('btn-stop').addEventListener('click',    stopRecording);
@@ -202,6 +230,9 @@
     let timerInterval   = null;
     let recordingStart  = null;
     let transcript      = '';
+    let lastResult      = null;
+    let voicePc         = null;
+    let voiceMicStream  = null;
 
     async function startRecording() {
       try {
@@ -433,6 +464,7 @@
         notesWrap.classList.add('hidden');
       }
 
+      lastResult = r;
       setState('result');
       speakResult(r);
     }
@@ -475,6 +507,103 @@
     }
 
     document.getElementById('btn-mute').addEventListener('click', stopSpeaking);
+    document.getElementById('btn-talk').addEventListener('click', () => { if (lastResult) startVoiceSession(lastResult); });
+    document.getElementById('btn-end-call').addEventListener('click', endVoiceSession);
+
+    // ── Voice conversation (OpenAI Realtime) ──────────────────────
+    async function startVoiceSession(r) {
+      stopSpeaking();
+      const btnTalk   = document.getElementById('btn-talk');
+      const panel     = document.getElementById('voice-panel');
+      btnTalk.disabled    = true;
+      btnTalk.textContent = 'Connecting...';
+
+      try {
+        const steps = (r.action_plan ?? []).map((s, i) => (i + 1) + '. ' + s.action).join('\n');
+        const warns = (r.safety_warnings ?? []).join(', ');
+        const systemPrompt =
+          'You are an expert plumbing diagnostic assistant on a voice call with a field plumber. ' +
+          'You already analyzed their video and provided this diagnosis:\n\n' +
+          'Diagnosis: ' + r.diagnosis + '\n' +
+          'Likely cause: ' + r.likely_cause + '\n' +
+          'Action plan:\n' + steps + '\n' +
+          (warns ? 'Safety warnings: ' + warns + '\n' : '') +
+          (r.notes ? 'Notes: ' + r.notes + '\n' : '') +
+          '\nAnswer follow-up questions concisely and practically. ' +
+          'Keep responses brief and actionable — the plumber is on a job site.';
+
+        const tokenRes = await fetch('/api/realtime-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ systemPrompt })
+        });
+        if (!tokenRes.ok) throw new Error('Session request failed (' + tokenRes.status + ')');
+        const sessionData  = await tokenRes.json();
+        const ephemeralKey = sessionData.client_secret?.value;
+        if (!ephemeralKey) throw new Error('No ephemeral key in response');
+
+        voicePc = new RTCPeerConnection();
+
+        const audioEl = document.getElementById('voice-audio');
+        voicePc.ontrack = e => { audioEl.srcObject = e.streams[0]; };
+
+        voiceMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        voiceMicStream.getTracks().forEach(t => voicePc.addTrack(t, voiceMicStream));
+
+        const dc = voicePc.createDataChannel('oai-events');
+        dc.onmessage = e => {
+          try {
+            const evt = JSON.parse(e.data);
+            if (evt.type === 'response.audio.delta')             setVoiceState('speaking');
+            else if (evt.type === 'response.done')               setVoiceState('listening');
+            else if (evt.type === 'input_audio_buffer.speech_started') setVoiceState('listening');
+          } catch (_) {}
+        };
+
+        const offer = await voicePc.createOffer();
+        await voicePc.setLocalDescription(offer);
+
+        const sdpRes = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', {
+          method: 'POST',
+          body: offer.sdp,
+          headers: { Authorization: 'Bearer ' + ephemeralKey, 'Content-Type': 'application/sdp' }
+        });
+        if (!sdpRes.ok) throw new Error('WebRTC SDP exchange failed (' + sdpRes.status + ')');
+
+        await voicePc.setRemoteDescription({ type: 'answer', sdp: await sdpRes.text() });
+
+        btnTalk.classList.add('hidden');
+        btnTalk.disabled    = false;
+        btnTalk.textContent = 'Talk with AI plumber →';
+        panel.classList.remove('hidden');
+        setVoiceState('listening');
+
+      } catch (err) {
+        console.error('[voice]', err);
+        btnTalk.disabled    = false;
+        btnTalk.textContent = 'Talk with AI plumber →';
+        endVoiceSession();
+      }
+    }
+
+    function setVoiceState(state) {
+      const dot   = document.getElementById('voice-dot');
+      const label = document.getElementById('voice-label');
+      dot.className = 'voice-dot ' + state;
+      if (state === 'listening') label.textContent = 'Listening — ask your question';
+      else if (state === 'speaking') label.textContent = 'AI is speaking...';
+      else label.textContent = 'Connecting...';
+    }
+
+    function endVoiceSession() {
+      if (voiceMicStream) { voiceMicStream.getTracks().forEach(t => t.stop()); voiceMicStream = null; }
+      if (voicePc)        { voicePc.close(); voicePc = null; }
+      const audioEl = document.getElementById('voice-audio');
+      if (audioEl) audioEl.srcObject = null;
+      document.getElementById('voice-panel')?.classList.add('hidden');
+      const btn = document.getElementById('btn-talk');
+      if (btn) { btn.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Talk with AI plumber →'; }
+    }
 
     // ── Save diagnosis (silent, non-blocking) ─────────────────────
     async function saveDiagnosis(r, firstFrameB64) {
