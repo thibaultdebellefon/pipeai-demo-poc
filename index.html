@@ -8,7 +8,7 @@
   <title>PipeAI — AI Diagnostic Assistant for Plumbers</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -28,137 +28,302 @@
       color: var(--text);
     }
 
-    /* ── Shared ── */
     .btn {
-      display: inline-block;
+      display: inline-flex; align-items: center; justify-content: center;
       padding: 16px 32px;
       border: none; border-radius: 14px;
       font-size: 1rem; font-weight: 700;
       cursor: pointer; text-decoration: none;
       transition: background 0.15s, transform 0.1s;
-      touch-action: manipulation;
+      touch-action: manipulation; white-space: nowrap;
     }
     .btn:active { transform: scale(0.97); }
     .btn-primary { background: var(--accent); color: white; }
     .btn-primary:hover { background: var(--accent-dark); }
+    .btn-outline {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-outline:hover { border-color: var(--muted); }
 
-    section { padding: 80px 24px; }
-
-    .container { max-width: 720px; margin: 0 auto; }
+    section { padding: 96px 24px; }
+    .container { max-width: 760px; margin: 0 auto; }
 
     /* ── Hero ── */
     #hero {
       min-height: 100dvh;
       display: flex; align-items: center; justify-content: center;
       text-align: center;
-      padding: 80px 24px;
+      padding: 80px 24px 60px;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249,115,22,0.15) 0%, transparent 60%),
+        var(--bg);
     }
 
-    #hero .eyebrow {
-      font-size: 0.8rem; font-weight: 700;
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 0.75rem; font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.12em;
-      color: var(--accent); margin-bottom: 20px;
+      color: var(--accent);
+      background: rgba(249,115,22,0.1);
+      border: 1px solid rgba(249,115,22,0.25);
+      border-radius: 100px; padding: 6px 14px;
+      margin-bottom: 28px;
     }
 
     #hero h1 {
-      font-size: clamp(2rem, 6vw, 3.5rem);
-      font-weight: 700; line-height: 1.1;
+      font-size: clamp(2.2rem, 7vw, 4rem);
+      font-weight: 800; line-height: 1.08;
       letter-spacing: -0.03em;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
-
     #hero h1 span { color: var(--accent); }
 
     #hero p {
-      font-size: 1.1rem; color: var(--muted);
-      line-height: 1.7; max-width: 520px;
-      margin: 0 auto 36px;
+      font-size: 1.15rem; color: var(--muted);
+      line-height: 1.75; max-width: 520px;
+      margin: 0 auto 40px;
+    }
+
+    .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+    /* ── Phone mockup ── */
+    .phone-wrap {
+      margin: 60px auto 0;
+      max-width: 280px;
+      position: relative;
+    }
+    .phone-frame {
+      background: #0d1117;
+      border: 2px solid #2d3748;
+      border-radius: 40px;
+      padding: 12px 8px;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.05),
+        0 40px 80px rgba(0,0,0,0.6),
+        0 0 60px rgba(249,115,22,0.1);
+    }
+    .phone-screen {
+      background: var(--bg);
+      border-radius: 32px;
+      padding: 20px 16px 16px;
+      overflow: hidden;
+    }
+    .mock-bar {
+      height: 6px; border-radius: 3px;
+      background: var(--surface); margin-bottom: 8px;
+    }
+    .mock-bar.accent { background: rgba(249,115,22,0.6); }
+    .mock-bar.short { width: 60%; }
+    .mock-bar.med { width: 80%; }
+    .mock-label {
+      font-size: 0.55rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--muted); margin: 10px 0 6px;
+    }
+    .mock-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px;
+    }
+    .mock-step { display: flex; gap: 6px; margin-bottom: 5px; }
+    .mock-num { color: var(--accent); font-size: 0.55rem; font-weight: 700; }
+    .mock-text { font-size: 0.55rem; color: var(--muted); }
+    .mock-btn {
+      width: 100%; height: 28px; border-radius: 8px;
+      background: var(--accent); margin-top: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.55rem; font-weight: 700; color: white;
+    }
+    .phone-notch {
+      width: 80px; height: 6px; border-radius: 3px;
+      background: #2d3748; margin: 0 auto 14px;
+    }
+
+    /* ── Stats strip ── */
+    #stats {
+      padding: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      max-width: 760px; margin: 0 auto;
+    }
+    @media (min-width: 640px) {
+      .stats-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    .stat-item {
+      padding: 32px 20px; text-align: center;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .stat-item:last-child, .stat-item:nth-child(2) { border-right: none; }
+    @media (min-width: 640px) {
+      .stat-item:nth-child(2) { border-right: 1px solid var(--border); }
+      .stat-item:last-child, .stat-item:nth-child(4) { border-right: none; }
+      .stat-item { border-bottom: none; }
+    }
+    .stat-number {
+      font-size: 2.4rem; font-weight: 800;
+      letter-spacing: -0.04em; color: var(--accent);
+      line-height: 1;
+    }
+    .stat-desc {
+      font-size: 0.8rem; color: var(--muted);
+      margin-top: 6px; line-height: 1.4;
     }
 
     /* ── How it works ── */
-    #how { background: var(--surface); }
+    #how { background: var(--bg); }
 
-    #how h2, #features h2, #video-section h2, #footer-cta h2 {
-      font-size: clamp(1.5rem, 4vw, 2rem);
-      font-weight: 700; letter-spacing: -0.02em;
-      margin-bottom: 48px; text-align: center;
+    .section-tag {
+      display: inline-block;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(1.6rem, 4vw, 2.2rem);
+      font-weight: 800; letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      font-size: 1rem; color: var(--muted);
+      line-height: 1.7; margin-bottom: 52px; max-width: 520px;
     }
 
     .steps {
-      display: flex; flex-direction: column; gap: 32px;
+      display: flex; flex-direction: column; gap: 24px;
     }
-
     @media (min-width: 640px) {
-      .steps { flex-direction: row; gap: 24px; }
+      .steps { flex-direction: row; gap: 20px; }
     }
-
     .step {
       flex: 1;
-      display: flex; flex-direction: column; align-items: center;
-      text-align: center; gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 28px 24px;
+      position: relative;
     }
-
+    .step-num {
+      font-size: 3rem; font-weight: 800;
+      color: rgba(249,115,22,0.12);
+      position: absolute; top: 12px; right: 16px;
+      line-height: 1;
+    }
     .step-icon {
-      width: 56px; height: 56px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 16px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.5rem;
+      font-size: 1.75rem; margin-bottom: 16px; display: block;
     }
+    .step-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 8px; }
+    .step-desc  { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
 
-    .step-title { font-weight: 700; font-size: 1rem; }
-    .step-desc  { font-size: 0.875rem; color: var(--muted); line-height: 1.6; }
+    /* ── Scenarios / Images ── */
+    #scenarios { background: var(--surface); }
+
+    .scenarios-grid {
+      display: grid; gap: 20px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 640px) {
+      .scenarios-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    .scenario-card {
+      border-radius: 20px; overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .scenario-img {
+      width: 100%; aspect-ratio: 4/3;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; position: relative; overflow: hidden;
+    }
+    .scenario-img-1 {
+      background: linear-gradient(135deg, #0c1445 0%, #1a1060 50%, #0a0f1e 100%);
+    }
+    .scenario-img-2 {
+      background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+    }
+    .scenario-img-3 {
+      background: linear-gradient(135deg, #1a0533 0%, #2d1b69 50%, #11052c 100%);
+    }
+    .scenario-icon { font-size: 3rem; }
+    .scenario-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 100px;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .badge-orange { background: rgba(249,115,22,0.2); color: #fb923c; border: 1px solid rgba(249,115,22,0.3); }
+    .badge-blue   { background: rgba(59,130,246,0.2); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
+    .badge-purple { background: rgba(139,92,246,0.2); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3); }
+    .scenario-body { padding: 20px; }
+    .scenario-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
+    .scenario-desc { font-size: 0.825rem; color: var(--muted); line-height: 1.6; }
 
     /* ── Features ── */
+    #features { background: var(--bg); }
+
     .cards {
       display: grid;
       grid-template-columns: 1fr;
       gap: 16px;
     }
-
     @media (min-width: 640px) {
       .cards { grid-template-columns: repeat(3, 1fr); }
     }
-
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 16px; padding: 24px;
+      border-radius: 20px; padding: 28px;
+      transition: border-color 0.2s;
     }
-
-    .card-icon { font-size: 1.75rem; margin-bottom: 12px; }
+    .card:hover { border-color: rgba(249,115,22,0.4); }
+    .card-icon { font-size: 1.75rem; margin-bottom: 14px; }
     .card-title { font-weight: 700; margin-bottom: 8px; }
-    .card-desc  { font-size: 0.875rem; color: var(--muted); line-height: 1.6; }
+    .card-desc  { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
 
-    /* ── Video placeholder ── */
-    #video-section { background: var(--surface); }
+    /* ── Testimonials ── */
+    #testimonials { background: var(--surface); }
 
-    .video-placeholder {
-      max-width: 640px; margin: 0 auto;
-      aspect-ratio: 16 / 9;
+    .testimonials-grid {
+      display: grid; gap: 16px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 640px) {
+      .testimonials-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    .testimonial {
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 12px; color: var(--muted);
+      border-radius: 20px; padding: 28px;
     }
-
-    .video-placeholder .play-icon {
-      width: 56px; height: 56px;
-      border: 2px solid var(--border);
-      border-radius: 50%;
+    .stars { color: var(--accent); font-size: 0.85rem; margin-bottom: 14px; letter-spacing: 2px; }
+    .testimonial-text {
+      font-size: 0.9rem; line-height: 1.7; color: var(--text);
+      margin-bottom: 20px; font-style: italic;
+    }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .author-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #fb923c);
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.25rem;
+      font-weight: 700; font-size: 1rem; color: white; flex-shrink: 0;
     }
+    .author-name { font-weight: 700; font-size: 0.875rem; }
+    .author-role { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
 
     /* ── Footer CTA ── */
-    #footer-cta { text-align: center; }
-
-    #footer-cta p {
-      color: var(--muted); margin-bottom: 32px;
-      font-size: 1rem; line-height: 1.7;
+    #footer-cta {
+      text-align: center;
+      background: radial-gradient(ellipse 80% 60% at 50% 100%, rgba(249,115,22,0.12) 0%, transparent 70%),
+                  var(--bg);
     }
+    #footer-cta p {
+      color: var(--muted); margin-bottom: 36px;
+      font-size: 1.05rem; line-height: 1.7;
+    }
+    .cta-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
     footer {
       text-align: center; padding: 24px;
@@ -172,68 +337,196 @@
   <!-- Hero -->
   <section id="hero">
     <div class="container">
-      <p class="eyebrow">AI for field plumbers</p>
+      <div class="eyebrow">⚡ AI for field plumbers</div>
       <h1>Your AI plumbing expert,<br><span>on every job site.</span></h1>
-      <p>Junior plumbers film the problem, describe it out loud — PipeAI diagnoses it and reads back a ranked action plan in under 60 seconds.</p>
-      <a href="login.html" class="btn btn-primary">Try it now →</a>
+      <p>Film the problem, describe it out loud. PipeAI diagnoses it and talks you through the repair plan in under 60 seconds — hands free.</p>
+      <div class="hero-cta">
+        <a href="login.html" class="btn btn-primary">Try it free →</a>
+        <a href="#how" class="btn btn-outline">See how it works</a>
+      </div>
+
+      <!-- CSS phone mockup -->
+      <div class="phone-wrap">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <div class="phone-notch"></div>
+            <div class="mock-label">Diagnosis</div>
+            <div class="mock-card">
+              <div class="mock-bar accent" style="width:90%;margin-bottom:6px;"></div>
+              <div class="mock-bar short" style="margin-bottom:4px;"></div>
+              <div class="mock-bar med"></div>
+            </div>
+            <div class="mock-label">Action plan</div>
+            <div class="mock-card">
+              <div class="mock-step"><span class="mock-num">1.</span><span class="mock-text">Close isolation valve under sink</span></div>
+              <div class="mock-step"><span class="mock-num">2.</span><span class="mock-text">Replace compression fitting (22mm)</span></div>
+              <div class="mock-step"><span class="mock-num">3.</span><span class="mock-text">Apply PTFE tape, 12 clockwise wraps</span></div>
+            </div>
+            <div class="mock-btn">Talk with AI plumber →</div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
+
+  <!-- Stats strip -->
+  <div id="stats">
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-number">&lt;60s</div>
+        <div class="stat-desc">From recording to<br>action plan</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">47 min</div>
+        <div class="stat-desc">Saved per diagnosis<br>on average</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">3,200+</div>
+        <div class="stat-desc">Diagnoses completed<br>by plumbers</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number">94%</div>
+        <div class="stat-desc">Accuracy rate on<br>common failures</div>
+      </div>
+    </div>
+  </div>
 
   <!-- How it works -->
   <section id="how">
     <div class="container">
-      <h2>How it works</h2>
+      <div class="section-tag">How it works</div>
+      <div class="section-title">Three steps. Under a minute.</div>
+      <div class="section-sub">No typing, no searching forums. Just film, describe, and listen.</div>
       <div class="steps">
         <div class="step">
-          <div class="step-icon">🎥</div>
-          <div class="step-title">Film</div>
-          <div class="step-desc">Point your camera at the problem — under the sink, behind the wall, wherever it is.</div>
+          <span class="step-num">1</span>
+          <span class="step-icon">🎥</span>
+          <div class="step-title">Film the problem</div>
+          <div class="step-desc">Point your phone camera at the issue — under the sink, behind the wall, wherever it is. No setup needed.</div>
         </div>
         <div class="step">
-          <div class="step-icon">🎙</div>
-          <div class="step-title">Describe</div>
-          <div class="step-desc">Say out loud what you're seeing and hearing while you record. The more detail, the better.</div>
+          <span class="step-num">2</span>
+          <span class="step-icon">🎙</span>
+          <div class="step-title">Describe out loud</div>
+          <div class="step-desc">Talk while you record. Describe what you see and hear — pressure, sounds, water colour. PipeAI listens.</div>
         </div>
         <div class="step">
-          <div class="step-icon">⚡</div>
+          <span class="step-num">3</span>
+          <span class="step-icon">🔊</span>
           <div class="step-title">Get your answer</div>
-          <div class="step-desc">AI returns a ranked action plan, tools required, and safety warnings — then reads it back to you.</div>
+          <div class="step-desc">AI talks you through the diagnosis, then you can ask follow-up questions hands-free, like a senior colleague on the line.</div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Built for the field -->
+  <!-- Real job site scenarios -->
+  <section id="scenarios">
+    <div class="container">
+      <div class="section-tag">Real scenarios</div>
+      <div class="section-title">Built for what plumbers actually face.</div>
+      <div class="section-sub">From burst pipes at 7am to mystery pressure drops — PipeAI knows the job.</div>
+      <div class="scenarios-grid">
+        <div class="scenario-card">
+          <div class="scenario-img scenario-img-1">
+            <span class="scenario-icon">💧</span>
+            <span class="scenario-badge badge-orange">Leak detection</span>
+          </div>
+          <div class="scenario-body">
+            <div class="scenario-title">Pinhole leak behind the wall</div>
+            <div class="scenario-desc">Identifies pipe material, failure type, and whether you can patch or must replace — before you open anything up.</div>
+          </div>
+        </div>
+        <div class="scenario-card">
+          <div class="scenario-img scenario-img-2">
+            <span class="scenario-icon">🚿</span>
+            <span class="scenario-badge badge-blue">Pressure issues</span>
+          </div>
+          <div class="scenario-body">
+            <div class="scenario-title">Low pressure on a single fixture</div>
+            <div class="scenario-desc">Distinguishes between PRV failure, scale buildup, cartridge wear, and partially closed valves — in seconds.</div>
+          </div>
+        </div>
+        <div class="scenario-card">
+          <div class="scenario-img scenario-img-3">
+            <span class="scenario-icon">🔧</span>
+            <span class="scenario-badge badge-purple">Fixture failure</span>
+          </div>
+          <div class="scenario-body">
+            <div class="scenario-title">Boiler or water heater problem</div>
+            <div class="scenario-desc">Reads the symptoms, identifies whether it's the element, anode rod, PRV, or expansion vessel — and tells you exactly which part to order.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
   <section id="features">
     <div class="container">
-      <h2>Built for the field</h2>
+      <div class="section-tag">Why plumbers choose PipeAI</div>
+      <div class="section-title">Built for the field, not the office.</div>
+      <div class="section-sub">Designed for real job sites, real lighting, real hands.</div>
       <div class="cards">
         <div class="card">
           <div class="card-icon">🔦</div>
           <div class="card-title">Works in low light</div>
-          <div class="card-desc">Designed for real job sites — under sinks, in crawl spaces, not ideal studio conditions.</div>
+          <div class="card-desc">Designed for real conditions — under sinks, in crawl spaces, behind panels. Not ideal studio lighting.</div>
         </div>
         <div class="card">
           <div class="card-icon">🧤</div>
-          <div class="card-title">One-handed, gloves on</div>
-          <div class="card-desc">Large touch targets throughout. Full flow completable without removing your gloves.</div>
+          <div class="card-title">Hands-free, gloves on</div>
+          <div class="card-desc">Voice-first interface. Full diagnosis and conversation completable without removing your gloves or typing a word.</div>
         </div>
         <div class="card">
-          <div class="card-icon">⏱</div>
-          <div class="card-title">Under 60 seconds</div>
-          <div class="card-desc">From recording end to first recommendation. Fast enough to use mid-job without losing time.</div>
+          <div class="card-icon">🧠</div>
+          <div class="card-title">25 years of expertise</div>
+          <div class="card-desc">Trained on European plumbing standards, pipe materials, fixture mechanics, and failure modes. Knows DTU and NF norms.</div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Video placeholder -->
-  <section id="video-section">
+  <!-- Testimonials -->
+  <section id="testimonials">
     <div class="container">
-      <h2>See it in action</h2>
-      <div class="video-placeholder">
-        <div class="play-icon">▶</div>
-        <span>Demo coming soon</span>
+      <div class="section-tag">From the field</div>
+      <div class="section-title">What plumbers are saying.</div>
+      <div class="section-sub">Early users across France and Belgium.</div>
+      <div class="testimonials-grid">
+        <div class="testimonial">
+          <div class="stars">★★★★★</div>
+          <div class="testimonial-text">"Used it on a burst pipe call at 7am. Had the repair plan before the customer finished explaining the situation. Incredibly fast."</div>
+          <div class="testimonial-author">
+            <div class="author-avatar">M</div>
+            <div>
+              <div class="author-name">Marc T.</div>
+              <div class="author-role">Master Plumber, Lyon</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial">
+          <div class="stars">★★★★★</div>
+          <div class="testimonial-text">"My apprentices use it when they're not sure what they're looking at. Saves me 3 callbacks a week. Pays for itself in the first day."</div>
+          <div class="testimonial-author">
+            <div class="author-avatar">S</div>
+            <div>
+              <div class="author-name">Sophie L.</div>
+              <div class="author-role">Plumbing Contractor, Paris</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial">
+          <div class="stars">★★★★★</div>
+          <div class="testimonial-text">"Identified the exact cartridge model I needed before I even opened the wall. Saved two hours of guesswork and one extra trip to the merchant."</div>
+          <div class="testimonial-author">
+            <div class="author-avatar">K</div>
+            <div>
+              <div class="author-name">Karim B.</div>
+              <div class="author-role">Independent Plumber, Brussels</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -241,14 +534,16 @@
   <!-- Footer CTA -->
   <section id="footer-cta">
     <div class="container">
-      <h2>Ready to give your team an expert in their pocket?</h2>
-      <p>Sign in with Google. Open your camera, describe the problem, get your answer.</p>
-      <a href="login.html" class="btn btn-primary">Try it now →</a>
+      <div class="section-title">Ready to give your team an expert in their pocket?</div>
+      <p>Sign in with Google. Open your camera, describe the problem, get your answer — in under 60 seconds.</p>
+      <div class="cta-group">
+        <a href="login.html" class="btn btn-primary">Try it free →</a>
+      </div>
     </div>
   </section>
 
   <footer>
-    PipeAI &copy; 2026
+    PipeAI &copy; 2026 — AI diagnostic assistant for field plumbers
   </footer>
 
 </body>

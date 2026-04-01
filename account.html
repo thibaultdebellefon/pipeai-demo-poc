@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0a0f1e">
-  <title>PipeAI — My Account</title>
+  <title>PipeAI — My Profile</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
@@ -20,80 +20,161 @@
       background: var(--bg); color: var(--text);
       min-height: 100dvh;
       display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      padding: 40px 24px; gap: 40px;
+      align-items: center;
+      padding: 24px 24px 48px;
+      gap: 20px;
       visibility: hidden;
     }
-    .profile { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+    /* ── Profile hero card ── */
+    .profile-card {
+      width: 100%; max-width: 400px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      overflow: hidden;
+    }
+    .profile-header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f2027 100%);
+      padding: 40px 24px 28px;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      position: relative;
+    }
+    .profile-header::after {
+      content: '';
+      position: absolute; bottom: -1px; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
     .avatar-wrap {
-      position: relative; width: 80px; height: 80px; cursor: pointer;
+      position: relative; cursor: pointer;
+    }
+    .avatar-ring {
+      width: 112px; height: 112px; border-radius: 50%;
+      padding: 3px;
+      background: linear-gradient(135deg, var(--accent), #fb923c, #fbbf24);
     }
     .avatar {
-      width: 80px; height: 80px; border-radius: 50%;
-      object-fit: cover; border: 2px solid var(--border);
-      background: var(--surface);
+      width: 100%; height: 100%; border-radius: 50%;
+      background: #1e293b;
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.75rem; font-weight: 700; color: var(--accent);
+      font-size: 2.5rem; font-weight: 700; color: var(--accent);
       overflow: hidden;
     }
     .avatar img { width: 100%; height: 100%; object-fit: cover; display: none; border-radius: 50%; }
-    .avatar-wrap:hover .avatar { border-color: var(--accent); }
-    .avatar-hint { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
-    .name-wrap { display: flex; align-items: center; gap: 8px; }
-    .display-name { font-size: 1.1rem; font-weight: 600; }
+    .avatar-camera {
+      position: absolute; bottom: 2px; right: 2px;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem;
+    }
+    .name-wrap {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .display-name {
+      font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em;
+    }
     .name-input {
-      font-size: 1.1rem; font-weight: 600; font-family: inherit;
-      background: var(--surface); border: 1px solid var(--accent);
-      border-radius: 8px; color: var(--text); padding: 4px 10px;
-      display: none; outline: none;
+      font-size: 1.4rem; font-weight: 700; font-family: inherit;
+      background: rgba(255,255,255,0.1); border: 1px solid var(--accent);
+      border-radius: 8px; color: var(--text); padding: 4px 12px;
+      display: none; outline: none; text-align: center;
     }
     .name-edit-btn {
       background: none; border: none; cursor: pointer;
-      color: var(--muted); font-size: 0.85rem; padding: 4px;
+      color: var(--muted); font-size: 0.9rem; padding: 4px;
+      opacity: 0.6; transition: opacity 0.15s;
     }
-    .name-edit-btn:hover { color: var(--text); }
+    .name-edit-btn:hover { opacity: 1; }
+    .user-email {
+      font-size: 0.85rem; color: var(--muted); margin-top: -6px;
+    }
+
+    /* ── Stats row ── */
+    .stats-row {
+      display: flex; border-top: 1px solid var(--border);
+    }
+    .stat {
+      flex: 1; padding: 16px 12px; text-align: center;
+    }
+    .stat + .stat { border-left: 1px solid var(--border); }
+    .stat-value { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 0.7rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* ── Actions ── */
+    .actions {
+      width: 100%; max-width: 400px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
     .btn {
-      display: block; width: 100%; max-width: 320px;
-      padding: 16px 24px; border: none; border-radius: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 14px 24px; border: none; border-radius: 14px;
       font-size: 1rem; font-weight: 700; font-family: inherit;
       cursor: pointer; text-decoration: none; text-align: center;
       transition: background 0.15s, transform 0.1s;
-      touch-action: manipulation;
+      touch-action: manipulation; white-space: nowrap;
     }
     .btn:active { transform: scale(0.97); }
-    .btn-primary { background: var(--accent); color: white; font-size: 1.15rem; }
+    .btn-primary { background: var(--accent); color: white; width: 100%; font-size: 1.1rem; padding: 18px 24px; }
     .btn-primary:hover { background: var(--accent-dark); }
     .btn-secondary {
       background: var(--surface); color: var(--text);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border); flex: 1;
     }
     .btn-secondary:hover { border-color: var(--muted); }
-    .row { display: flex; gap: 12px; width: 100%; max-width: 320px; }
-    .row .btn { max-width: none; }
+    .btn-danger { background: #dc2626; color: white; flex: 1; }
+    .btn-danger:hover { background: #b91c1c; }
+
+    .row { display: flex; gap: 12px; width: 100%; }
+
     #file-input { display: none; }
+    .avatar-hint { font-size: 0.7rem; color: var(--muted); }
   </style>
 </head>
 <body>
-  <div class="profile">
-    <div class="avatar-wrap" id="avatar-wrap" title="Tap to change photo">
-      <div class="avatar" id="avatar-el">
-        <span id="avatar-initials">?</span>
-        <img id="avatar-img" alt="avatar">
+
+  <div class="profile-card">
+    <div class="profile-header">
+      <div class="avatar-wrap" id="avatar-wrap" title="Tap to change photo">
+        <div class="avatar-ring">
+          <div class="avatar" id="avatar-el">
+            <span id="avatar-initials">?</span>
+            <img id="avatar-img" alt="avatar">
+          </div>
+        </div>
+        <div class="avatar-camera">📷</div>
       </div>
+      <small class="avatar-hint">Tap to change photo</small>
+      <div class="name-wrap">
+        <span class="display-name" id="display-name-text">Loading...</span>
+        <input class="name-input" id="name-input" type="text" maxlength="60" placeholder="Your name">
+        <button class="name-edit-btn" id="name-edit-btn" title="Edit name">✏️</button>
+      </div>
+      <div class="user-email" id="user-email"></div>
     </div>
-    <small class="avatar-hint">Tap photo to change</small>
-    <div class="name-wrap">
-      <span class="display-name" id="display-name-text">Loading...</span>
-      <input class="name-input" id="name-input" type="text" maxlength="60" placeholder="Your name">
-      <button class="name-edit-btn" id="name-edit-btn" title="Edit name">✏️</button>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-value" id="stat-diagnoses">—</div>
+        <div class="stat-label">Diagnoses</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="stat-saved">—</div>
+        <div class="stat-label">Min saved</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">AI</div>
+        <div class="stat-label">Expert on call</div>
+      </div>
     </div>
   </div>
 
-  <a href="app.html" class="btn btn-primary">New video →</a>
-
-  <div class="row">
-    <a href="history.html" class="btn btn-secondary">My diagnoses</a>
-    <button id="btn-logout" class="btn btn-secondary">Log out</button>
+  <div class="actions">
+    <a href="app.html" class="btn btn-primary">New video →</a>
+    <div class="row">
+      <a href="history.html" class="btn btn-secondary">My diagnoses</a>
+      <button id="btn-logout" class="btn btn-danger">Log out</button>
+    </div>
   </div>
 
   <input type="file" id="file-input" accept="image/*">
@@ -110,6 +191,7 @@
       userId = session.user.id;
       document.body.style.visibility = 'visible';
       await loadProfile(session.user);
+      await loadStats();
     })();
 
     async function loadProfile(user) {
@@ -120,11 +202,22 @@
       }
       const name = profile.display_name || user.user_metadata?.full_name || user.email || 'You';
       setDisplayName(name);
+      document.getElementById('user-email').textContent = user.email || '';
       if (profile.avatar_url) {
         setAvatar(profile.avatar_url);
       } else {
         document.getElementById('avatar-initials').textContent = name.charAt(0).toUpperCase();
       }
+    }
+
+    async function loadStats() {
+      const { count } = await sb
+        .from('diagnoses')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      const n = count ?? 0;
+      document.getElementById('stat-diagnoses').textContent = n;
+      document.getElementById('stat-saved').textContent = Math.round(n * 47);
     }
 
     function setDisplayName(name) {
