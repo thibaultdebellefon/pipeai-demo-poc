@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -107,7 +109,7 @@
     }
   </style>
 </head>
-<body>
+<body style="visibility:hidden">
 
   <!-- STATE: ready -->
   <div id="state-ready" class="state active">
@@ -166,6 +168,16 @@
   </div>
 
   <script>
+    // ── Auth guard ────────────────────────────────────────────────
+    const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    let _userId = null;
+    (async () => {
+      const { data: { session } } = await _supabase.auth.getSession();
+      if (!session) { window.location.href = 'login.html'; return; }
+      _userId = session.user.id;
+      document.body.style.visibility = 'visible';
+    })();
+
     // ── State machine ──────────────────────────────────────────────
     const STATES = ['ready','recording','processing','result','error'];
 
@@ -328,6 +340,7 @@
         catch { showError('Could not parse AI response. Try again.'); console.error('Raw response:', raw); return; }
 
         renderResult(result);
+        saveDiagnosis(result, extractedFrames[0]);
 
       } catch (err) {
         clearTimeout(timeoutId);
@@ -461,6 +474,33 @@
     }
 
     document.getElementById('btn-mute').addEventListener('click', stopSpeaking);
+
+    // ── Save diagnosis (silent, non-blocking) ─────────────────────
+    async function saveDiagnosis(r, firstFrameB64) {
+      try {
+        if (!_userId || !firstFrameB64) return;
+        const diagId = crypto.randomUUID();
+        const byteChars = atob(firstFrameB64);
+        const byteNums  = new Array(byteChars.length).fill(0).map((_, i) => byteChars.charCodeAt(i));
+        const blob = new Blob([new Uint8Array(byteNums)], { type: 'image/jpeg' });
+        const path = _userId + '/' + diagId + '.jpg';
+        await _supabase.storage.from('frames').upload(path, blob, { contentType: 'image/jpeg' });
+        const { data: { publicUrl } } = _supabase.storage.from('frames').getPublicUrl(path);
+        await _supabase.from('diagnoses').insert({
+          id: diagId,
+          user_id: _userId,
+          frame_url: publicUrl,
+          diagnosis:       r.diagnosis,
+          likely_cause:    r.likely_cause,
+          action_plan:     r.action_plan,
+          safety_warnings: r.safety_warnings,
+          confidence:      r.confidence,
+          notes:           r.notes
+        });
+      } catch (err) {
+        console.warn('[saveDiagnosis] silent failure:', err);
+      }
+    }
   </script>
 </body>
 </html>

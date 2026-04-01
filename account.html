@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0f1e">
+  <title>PipeAI — My Account</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0f1e; --surface: #111827; --border: #1f2937;
+      --accent: #f97316; --accent-dark: #c2410c;
+      --text: #f1f5f9; --muted: #94a3b8;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100dvh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 40px 24px; gap: 40px;
+      visibility: hidden;
+    }
+    .profile { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .avatar-wrap {
+      position: relative; width: 80px; height: 80px; cursor: pointer;
+    }
+    .avatar {
+      width: 80px; height: 80px; border-radius: 50%;
+      object-fit: cover; border: 2px solid var(--border);
+      background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.75rem; font-weight: 700; color: var(--accent);
+      overflow: hidden;
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; display: none; border-radius: 50%; }
+    .avatar-wrap:hover .avatar { border-color: var(--accent); }
+    .avatar-hint { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+    .name-wrap { display: flex; align-items: center; gap: 8px; }
+    .display-name { font-size: 1.1rem; font-weight: 600; }
+    .name-input {
+      font-size: 1.1rem; font-weight: 600; font-family: inherit;
+      background: var(--surface); border: 1px solid var(--accent);
+      border-radius: 8px; color: var(--text); padding: 4px 10px;
+      display: none; outline: none;
+    }
+    .name-edit-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 0.85rem; padding: 4px;
+    }
+    .name-edit-btn:hover { color: var(--text); }
+    .btn {
+      display: block; width: 100%; max-width: 320px;
+      padding: 16px 24px; border: none; border-radius: 14px;
+      font-size: 1rem; font-weight: 700; font-family: inherit;
+      cursor: pointer; text-decoration: none; text-align: center;
+      transition: background 0.15s, transform 0.1s;
+      touch-action: manipulation;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--accent); color: white; font-size: 1.15rem; }
+    .btn-primary:hover { background: var(--accent-dark); }
+    .btn-secondary {
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--muted); }
+    .row { display: flex; gap: 12px; width: 100%; max-width: 320px; }
+    .row .btn { max-width: none; }
+    #file-input { display: none; }
+  </style>
+</head>
+<body>
+  <div class="profile">
+    <div class="avatar-wrap" id="avatar-wrap" title="Tap to change photo">
+      <div class="avatar" id="avatar-el">
+        <span id="avatar-initials">?</span>
+        <img id="avatar-img" alt="avatar">
+      </div>
+    </div>
+    <small class="avatar-hint">Tap photo to change</small>
+    <div class="name-wrap">
+      <span class="display-name" id="display-name-text">Loading...</span>
+      <input class="name-input" id="name-input" type="text" maxlength="60" placeholder="Your name">
+      <button class="name-edit-btn" id="name-edit-btn" title="Edit name">✏️</button>
+    </div>
+  </div>
+
+  <a href="app.html" class="btn btn-primary">New video →</a>
+
+  <div class="row">
+    <a href="history.html" class="btn btn-secondary">My diagnoses</a>
+    <button id="btn-logout" class="btn btn-secondary">Log out</button>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    let userId = null;
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { window.location.href = 'login.html'; return; }
+      userId = session.user.id;
+      document.body.style.visibility = 'visible';
+      await loadProfile(session.user);
+    })();
+
+    async function loadProfile(user) {
+      let { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      if (!profile) {
+        await supabase.from('profiles').insert({ id: userId, display_name: null });
+        profile = { display_name: null, avatar_url: null };
+      }
+      const name = profile.display_name || user.user_metadata?.full_name || user.email || 'You';
+      setDisplayName(name);
+      if (profile.avatar_url) {
+        setAvatar(profile.avatar_url);
+      } else {
+        document.getElementById('avatar-initials').textContent = name.charAt(0).toUpperCase();
+      }
+    }
+
+    function setDisplayName(name) {
+      document.getElementById('display-name-text').textContent = name;
+      document.getElementById('name-input').value = name;
+    }
+
+    function setAvatar(url) {
+      const img = document.getElementById('avatar-img');
+      img.src = url;
+      img.style.display = 'block';
+      document.getElementById('avatar-initials').style.display = 'none';
+    }
+
+    document.getElementById('name-edit-btn').addEventListener('click', () => {
+      document.getElementById('display-name-text').style.display = 'none';
+      const input = document.getElementById('name-input');
+      input.style.display = 'inline-block';
+      input.focus();
+    });
+
+    async function saveName() {
+      const input = document.getElementById('name-input');
+      const name = input.value.trim() || 'You';
+      input.style.display = 'none';
+      document.getElementById('display-name-text').style.display = 'inline';
+      setDisplayName(name);
+      await supabase.from('profiles').update({ display_name: name, updated_at: new Date().toISOString() }).eq('id', userId);
+    }
+
+    document.getElementById('name-input').addEventListener('blur', saveName);
+    document.getElementById('name-input').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+
+    document.getElementById('avatar-wrap').addEventListener('click', () => {
+      document.getElementById('file-input').click();
+    });
+
+    document.getElementById('file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const path = userId + '/avatar.jpg';
+      const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type });
+      if (!error) {
+        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+        setAvatar(publicUrl + '?t=' + Date.now());
+        await supabase.from('profiles').update({ avatar_url: publicUrl, updated_at: new Date().toISOString() }).eq('id', userId);
+      }
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      window.location.href = 'login.html';
+    });
+  </script>
+</body>
+</html>
