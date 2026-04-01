@@ -101,11 +101,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
   <script>
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
     let userId = null;
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await sb.auth.getSession();
       if (!session) { window.location.href = 'login.html'; return; }
       userId = session.user.id;
       document.body.style.visibility = 'visible';
@@ -113,9 +113,9 @@
     })();
 
     async function loadProfile(user) {
-      let { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      let { data: profile } = await sb.from('profiles').select('*').eq('id', userId).single();
       if (!profile) {
-        await supabase.from('profiles').insert({ id: userId, display_name: null });
+        await sb.from('profiles').insert({ id: userId, display_name: null });
         profile = { display_name: null, avatar_url: null };
       }
       const name = profile.display_name || user.user_metadata?.full_name || user.email || 'You';
@@ -152,7 +152,7 @@
       input.style.display = 'none';
       document.getElementById('display-name-text').style.display = 'inline';
       setDisplayName(name);
-      await supabase.from('profiles').update({ display_name: name, updated_at: new Date().toISOString() }).eq('id', userId);
+      await sb.from('profiles').update({ display_name: name, updated_at: new Date().toISOString() }).eq('id', userId);
     }
 
     document.getElementById('name-input').addEventListener('blur', saveName);
@@ -166,16 +166,16 @@
       const file = e.target.files[0];
       if (!file) return;
       const path = userId + '/avatar.jpg';
-      const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type });
+      const { error } = await sb.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type });
       if (!error) {
-        const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+        const { data: { publicUrl } } = sb.storage.from('avatars').getPublicUrl(path);
         setAvatar(publicUrl + '?t=' + Date.now());
-        await supabase.from('profiles').update({ avatar_url: publicUrl, updated_at: new Date().toISOString() }).eq('id', userId);
+        await sb.from('profiles').update({ avatar_url: publicUrl, updated_at: new Date().toISOString() }).eq('id', userId);
       }
     });
 
     document.getElementById('btn-logout').addEventListener('click', async () => {
-      await supabase.auth.signOut();
+      await sb.auth.signOut();
       window.location.href = 'login.html';
     });
   </script>

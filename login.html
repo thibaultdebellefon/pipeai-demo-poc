@@ -75,15 +75,15 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
   <script>
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await sb.auth.getSession();
       if (session) { window.location.href = 'account.html'; }
     })();
 
     document.getElementById('btn-google').addEventListener('click', async () => {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error } = await sb.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: window.location.origin + '/account.html' }
       });
