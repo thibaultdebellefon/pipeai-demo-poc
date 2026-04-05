@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#0a0f1e">
   <title>PipeAI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="config.js"></script>
@@ -14,192 +13,187 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:           #0a0f1e;
-      --surface:      #111827;
-      --border:       #1f2937;
-      --accent:       #f97316;
-      --accent-dark:  #c2410c;
-      --text:         #f1f5f9;
-      --muted:        #94a3b8;
+      --bg:      #0a0f1e;
+      --surface: #111827;
+      --border:  #1f2937;
+      --accent:  #f97316;
+      --text:    #f1f5f9;
+      --muted:   #94a3b8;
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Inter', sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* ── State visibility ─────────────────────────────────── */
+    .state { display: none; }
+    .state.active { display: flex; }
+
+    /* ── IDLE ─────────────────────────────────────────────── */
+    #state-idle {
+      min-height: 100dvh;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 32px 24px;
+      text-align: center;
+    }
+
+    #state-idle h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; }
+    #state-idle .sub {
+      font-size: 0.95rem; color: var(--muted);
+      line-height: 1.6; max-width: 320px;
+    }
+
+    /* ── CONNECTING ───────────────────────────────────────── */
+    #state-connecting {
+      min-height: 100dvh;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid var(--surface);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── ACTIVE ───────────────────────────────────────────── */
+    #state-active {
+      position: fixed; inset: 0;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: max(48px, env(safe-area-inset-top)) 24px
+               max(32px, env(safe-area-inset-bottom)) 24px;
+      background: var(--bg);
+    }
+
+    /* Camera PiP — bottom-right corner */
+    #camera-preview {
+      position: fixed;
+      bottom: max(100px, calc(env(safe-area-inset-bottom) + 88px));
+      right: 16px;
+      width: 96px; height: 128px;
+      border-radius: 14px;
+      object-fit: cover;
+      border: 2px solid rgba(255,255,255,0.15);
+      z-index: 20;
+      background: #000;
+    }
+
+    /* AI orb */
+    .orb-wrap {
+      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: max(24px, env(safe-area-inset-top))
-               max(24px, env(safe-area-inset-right))
-               max(24px, env(safe-area-inset-bottom))
-               max(24px, env(safe-area-inset-left));
+      gap: 24px;
     }
 
-    .state { display: none; flex-direction: column; align-items: center; gap: 20px; width: 100%; max-width: 480px; }
-    .state.active { display: flex; }
+    #ai-orb {
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #818cf8, #1d4ed8 60%, #0f172a);
+      box-shadow: 0 0 50px rgba(99,102,241,0.35), 0 0 100px rgba(99,102,241,0.15);
+    }
 
-    #state-result { overflow-y: auto; max-height: 100dvh; }
+    #ai-orb.speaking {
+      animation: orb-speak 0.6s ease-in-out infinite alternate;
+    }
+    #ai-orb.listening {
+      animation: orb-breathe 3s ease-in-out infinite;
+    }
+    #ai-orb.connecting {
+      animation: orb-breathe 1.5s ease-in-out infinite;
+      opacity: 0.6;
+    }
 
-    .hidden { display: none !important; }
+    @keyframes orb-speak {
+      from { transform: scale(1);    box-shadow: 0 0 50px rgba(99,102,241,0.4); }
+      to   { transform: scale(1.18); box-shadow: 0 0 80px rgba(99,102,241,0.7); }
+    }
+    @keyframes orb-breathe {
+      0%,100% { transform: scale(1); }
+      50%     { transform: scale(1.06); }
+    }
 
-    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
-    .subtitle { font-size: 0.9rem; color: var(--muted); text-align: center; line-height: 1.5; }
+    #status-label {
+      font-size: 1rem; color: var(--muted);
+      min-height: 1.4em; text-align: center;
+    }
 
+    /* ── Buttons ─────────────────────────────────────────── */
     .btn {
-      width: 100%; min-height: 56px; padding: 18px;
+      width: 100%; max-width: 360px;
+      min-height: 56px; padding: 18px;
       border: none; border-radius: 16px;
       font-size: 1rem; font-weight: 600;
       cursor: pointer; touch-action: manipulation;
       transition: opacity 0.15s;
     }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn:active { opacity: 0.75; }
-    .btn-primary   { background: var(--accent); color: white; }
-    .btn-primary:hover { background: var(--accent-dark); }
-    .btn-danger    { background: #ef4444; color: white; }
+    .btn:active   { opacity: 0.75; }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-danger   { background: #ef4444; color: #fff; }
     .btn-secondary { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
-    .btn-talk      { background: #1d4ed8; color: white; }
-    .btn-talk:hover { background: #1e40af; }
 
-    #timer { font-size: 3rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #ef4444; }
-
-    #preview {
-      width: 100%; max-height: 280px; aspect-ratio: 16 / 9;
-      border-radius: 12px; object-fit: cover; background: #000;
+    /* ── ERROR ────────────────────────────────────────────── */
+    #state-error {
+      min-height: 100dvh;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 32px 24px;
     }
 
-    .spinner {
-      width: 48px; height: 48px;
-      border: 4px solid var(--surface); border-top-color: var(--accent);
-      border-radius: 50%; animation: spin 0.8s linear infinite;
+    .error-box {
+      background: #1c0a0a; border: 1px solid #7f1d1d;
+      border-radius: 12px; padding: 20px; text-align: center;
+      max-width: 360px; width: 100%;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .card {
-      width: 100%; background: var(--surface);
-      border-radius: 12px; padding: 16px; border: 1px solid var(--border);
-    }
-    .card-label {
-      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.08em; color: var(--muted); margin-bottom: 8px;
-    }
-    .card-value { font-size: 0.95rem; line-height: 1.6; }
-
-    .step-row { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--bg); }
-    .step-row:last-child { border-bottom: none; }
-    .step-num { font-weight: 700; color: var(--accent); min-width: 20px; }
-    .tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-    .tool-tag {
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 6px; padding: 3px 8px; font-size: 0.75rem; color: var(--muted);
-    }
-    .warning-tag { background: #7c2d12; border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; color: #fca5a5; margin-bottom: 8px; }
-
-    .confidence-banner { width: 100%; padding: 12px; border-radius: 10px; font-size: 0.85rem; font-weight: 500; text-align: center; }
-    .confidence-low  { background: #422006; color: #fbbf24; border: 1px solid #92400e; }
-    .confidence-high { background: #052e16; color: #4ade80; border: 1px solid #166534; }
-
-    .error-box { background: #1c0a0a; border: 1px solid #7f1d1d; border-radius: 12px; padding: 20px; text-align: center; }
     #error-message { color: #fca5a5; font-size: 0.95rem; line-height: 1.5; }
-
-    /* ── Voice UI ── */
-    .voice-dot {
-      width: 22px; height: 22px; border-radius: 50%;
-      background: var(--muted); transition: background 0.3s;
-    }
-    .voice-dot.listening { background: #4ade80; animation: vpulse 1.4s ease-in-out infinite; }
-    .voice-dot.speaking  { background: var(--accent); animation: vpulse 0.7s ease-in-out infinite; }
-    @keyframes vpulse {
-      0%, 100% { transform: scale(1); }
-      50%       { transform: scale(1.5); }
-    }
-    .voice-label { font-size: 0.9rem; color: var(--muted); text-align: center; }
-
-    /* Voice panel in result state */
-    .voice-panel {
-      width: 100%; background: var(--surface);
-      border: 1px solid var(--border); border-radius: 16px;
-      padding: 20px; display: flex; flex-direction: column;
-      align-items: center; gap: 12px;
-    }
-
-    @media (max-width: 400px) {
-      #timer { font-size: 2.5rem; }
-      .btn   { font-size: 0.95rem; padding: 16px; }
-    }
   </style>
 </head>
 <body style="visibility:hidden">
 
-  <!-- STATE: ready -->
-  <div id="state-ready" class="state active">
+  <!-- IDLE -->
+  <div id="state-idle" class="state active">
     <h1>PipeAI</h1>
-    <p class="subtitle">Point your camera at the problem.<br>Describe what you're seeing out loud while recording.</p>
-    <p class="subtitle" style="font-size:0.8rem;">AI will diagnose it in under 60 seconds.</p>
-    <button id="btn-record" class="btn btn-primary">Start recording →</button>
+    <p class="sub">Point your camera at the plumbing problem and start talking. The AI sees and hears everything in real time.</p>
+    <button id="btn-start" class="btn btn-primary">Start consultation →</button>
+    <a href="account.html" class="btn btn-secondary" style="text-align:center;text-decoration:none;">Profile →</a>
   </div>
 
-  <!-- STATE: recording -->
-  <div id="state-recording" class="state">
-    <div id="timer">0:00</div>
-    <video id="preview" autoplay muted playsinline></video>
-    <button id="btn-stop" class="btn btn-danger">Stop &amp; Analyse</button>
-  </div>
-
-  <!-- STATE: processing -->
-  <div id="state-processing" class="state">
+  <!-- CONNECTING -->
+  <div id="state-connecting" class="state">
     <div class="spinner"></div>
-    <p class="subtitle">Analysing...<br>~30 seconds</p>
+    <p style="color:var(--muted);font-size:0.9rem;">Connecting...</p>
   </div>
 
-  <!-- STATE: talking — AI speaks first, user can ask questions -->
-  <div id="state-talking" class="state">
-    <h1>PipeAI</h1>
-    <p class="subtitle">Your diagnosis is ready.<br>AI plumber is explaining the situation...</p>
-    <div id="talking-dot" class="voice-dot" style="width:32px;height:32px;margin:8px 0;"></div>
-    <div id="talking-label" class="voice-label" style="font-size:1rem;">Connecting...</div>
-    <p class="subtitle" style="font-size:0.8rem;margin-top:4px;">Ask any follow-up questions when ready.</p>
-    <button id="btn-end-talk" class="btn btn-primary" style="margin-top:8px;">View full diagnosis →</button>
+  <!-- ACTIVE -->
+  <div id="state-active" class="state">
+    <video id="camera-preview" autoplay muted playsinline></video>
+    <div class="orb-wrap">
+      <div id="ai-orb" class="connecting"></div>
+      <div id="status-label">Connecting...</div>
+    </div>
+    <button id="btn-end" class="btn btn-danger">End session</button>
   </div>
 
-  <!-- STATE: result -->
-  <div id="state-result" class="state">
-    <div id="confidence-banner" class="confidence-banner hidden"></div>
-    <div class="card">
-      <div class="card-label">Diagnosis</div>
-      <div id="result-diagnosis" class="card-value"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Likely cause</div>
-      <div id="result-cause" class="card-value"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Action plan</div>
-      <div id="result-steps"></div>
-    </div>
-    <div id="result-warnings-wrap" class="card hidden">
-      <div class="card-label">Safety warnings</div>
-      <div id="result-warnings"></div>
-    </div>
-    <div id="result-notes-wrap" class="card hidden">
-      <div class="card-label">Notes</div>
-      <div id="result-notes" class="card-value"></div>
-    </div>
-    <!-- Voice panel: only visible when a follow-up session is active -->
-    <div id="voice-panel" class="voice-panel hidden">
-      <div id="voice-dot" class="voice-dot"></div>
-      <div id="voice-label" class="voice-label">Connecting...</div>
-      <button id="btn-end-call" class="btn btn-danger">End conversation</button>
-    </div>
-    <button id="btn-talk" class="btn btn-talk">Talk with AI plumber →</button>
-    <button id="btn-restart" class="btn btn-secondary">New video</button>
-    <a href="account.html" class="btn btn-secondary" style="text-align:center;text-decoration:none;">Go to profile →</a>
-  </div>
-
-  <!-- STATE: error -->
+  <!-- ERROR -->
   <div id="state-error" class="state">
     <div class="error-box">
       <div id="error-message"></div>
@@ -207,66 +201,21 @@
     <button id="btn-retry" class="btn btn-primary">Try again</button>
   </div>
 
-  <!-- Shared audio element for WebRTC output — lives outside states so it always plays -->
-  <audio id="voice-audio" autoplay style="display:none"></audio>
-
   <script>
-    // ── Auth guard ────────────────────────────────────────────────
+    // ── Auth guard ─────────────────────────────────────────────────
     const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-    let _userId = null;
     (async () => {
       const { data: { session } } = await _supabase.auth.getSession();
       if (!session) { window.location.href = 'login.html'; return; }
-      _userId = session.user.id;
       document.body.style.visibility = 'visible';
     })();
 
     // ── State machine ──────────────────────────────────────────────
-    const STATES = ['ready', 'recording', 'processing', 'talking', 'result', 'error'];
-
+    const STATES = ['idle', 'connecting', 'active', 'error'];
     function setState(name) {
       STATES.forEach(s =>
         document.getElementById('state-' + s).classList.toggle('active', s === name)
       );
-    }
-
-    // ── Navigation ─────────────────────────────────────────────────
-    document.getElementById('btn-restart').addEventListener('click', () => { endVoiceSession(false); setState('ready'); });
-    document.getElementById('btn-retry').addEventListener('click',   () => setState('ready'));
-    document.getElementById('btn-record').addEventListener('click',  startRecording);
-    document.getElementById('btn-stop').addEventListener('click',    stopRecording);
-    document.getElementById('btn-end-talk').addEventListener('click', () => endVoiceSession(true));
-    document.getElementById('btn-talk').addEventListener('click',    () => { if (lastResult) startFollowUpVoice(lastResult); });
-    document.getElementById('btn-end-call').addEventListener('click', () => endVoiceSession(false));
-
-    // ── Video & Media ─────────────────────────────────────────────────
-    let mediaStream     = null;
-    let mediaRecorder   = null;
-    let videoChunks     = [];
-    let extractedFrames = [];
-    let timerInterval   = null;
-    let recordingStart  = null;
-    let transcript      = '';
-    let lastResult      = null;
-    let voicePc         = null;
-    let voiceMicStream  = null;
-
-    async function startRecording() {
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: true
-        });
-        document.getElementById('preview').srcObject = mediaStream;
-        setState('recording');
-        beginCapture();
-      } catch (err) {
-        showError(
-          err.name === 'NotAllowedError'
-            ? 'Camera and microphone access required. Please allow access in your browser settings, then tap Try again.'
-            : 'Could not access camera: ' + err.message
-        );
-      }
     }
 
     function showError(msg) {
@@ -274,378 +223,14 @@
       setState('error');
     }
 
-    function beginCapture() {
-      videoChunks     = [];
-      extractedFrames = [];
-      transcript      = '';
+    // ── Wire buttons ───────────────────────────────────────────────
+    document.getElementById('btn-start').addEventListener('click', startSession);
+    document.getElementById('btn-end').addEventListener('click', endSession);
+    document.getElementById('btn-retry').addEventListener('click', () => setState('idle'));
 
-      const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-      mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) videoChunks.push(e.data); };
-
-      const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognitionClass) {
-        const recogniser = new SpeechRecognitionClass();
-        recogniser.continuous     = true;
-        recogniser.interimResults = false;
-        recogniser.lang           = 'en-US';
-        recogniser.onresult = e => {
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            if (e.results[i].isFinal) transcript += e.results[i][0].transcript + ' ';
-          }
-        };
-        recogniser.onerror = e => console.warn('Speech recognition error:', e.error);
-        recogniser.start();
-        mediaRecorder._recogniser = recogniser;
-      }
-
-      recordingStart = Date.now();
-      timerInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - recordingStart) / 1000);
-        const m = Math.floor(elapsed / 60);
-        const s = String(elapsed % 60).padStart(2, '0');
-        document.getElementById('timer').textContent = m + ':' + s;
-      }, 500);
-
-      const video  = document.getElementById('preview');
-      const canvas = document.createElement('canvas');
-      const ctx    = canvas.getContext('2d');
-
-      function extractFrame() {
-        if (extractedFrames.length >= 3) return;
-        const vw = video.videoWidth  || 1280;
-        const vh = video.videoHeight || 720;
-        const scale   = Math.min(1, 1280 / Math.max(vw, vh));
-        canvas.width  = Math.round(vw * scale);
-        canvas.height = Math.round(vh * scale);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        extractedFrames.push(dataUrl.slice(dataUrl.indexOf(',') + 1));
-      }
-
-      setTimeout(extractFrame, 500);
-      const frameInterval = setInterval(() => {
-        if (extractedFrames.length < 3) extractFrame(); else clearInterval(frameInterval);
-      }, 5000);
-
-      mediaRecorder.start(1000);
-      mediaRecorder._frameInterval = frameInterval;
-    }
-
-    // ── Recording control ──────────────────────────────────────────
-    function stopRecording() {
-      clearInterval(timerInterval);
-      clearInterval(mediaRecorder._frameInterval);
-      if (mediaRecorder._recogniser) mediaRecorder._recogniser.stop();
-
-      mediaRecorder.onstop = () => {
-        mediaStream.getTracks().forEach(t => t.stop());
-        setState('processing');
-        analyseRecording();
-      };
-      mediaRecorder.stop();
-    }
-
-    async function analyseRecording() {
-      if (extractedFrames.length === 0) {
-        showError('No frames captured. Try a longer recording.');
-        return;
-      }
-
-      const controller = new AbortController();
-      const timeoutId  = setTimeout(() => {
-        controller.abort();
-        showError('This is taking longer than expected. Try again with a shorter recording.');
-      }, 60000);
-
-      try {
-        const res = await fetch('/api/diagnose', {
-          method: 'POST',
-          signal: controller.signal,
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ frames: extractedFrames, transcript: transcript.trim() })
-        });
-
-        clearTimeout(timeoutId);
-
-        if (res.status === 401) { showError('API configuration error. Please contact support.'); return; }
-        if (res.status === 529) { showError('AI service is overloaded right now. Wait a few seconds and try again.'); return; }
-        if (!res.ok)            { showError('Analysis failed (HTTP ' + res.status + '). Check your connection and try again.'); return; }
-
-        const data = await res.json();
-        const raw  = data.content?.[0]?.text ?? '';
-
-        let result;
-        try { result = JSON.parse(raw); }
-        catch { showError('Could not parse AI response. Try again.'); console.error('Raw response:', raw); return; }
-
-        lastResult = result;
-        saveDiagnosis(result, extractedFrames[0]); // save immediately, non-blocking
-        startAutoVoice(result);                    // go to talking state, AI speaks first
-
-      } catch (err) {
-        clearTimeout(timeoutId);
-        if (err.name !== 'AbortError') {
-          showError('Analysis failed. Check your connection and try again.');
-          console.error(err);
-        }
-      }
-    }
-
-    function renderResult(r) {
-      const banner = document.getElementById('confidence-banner');
-      if (r.confidence === 'low') {
-        banner.textContent = 'Low confidence — footage may be too dark or unclear. Try again with better lighting.';
-        banner.classList.remove('confidence-high', 'hidden');
-        banner.classList.add('confidence-low');
-      } else if (r.confidence === 'high') {
-        banner.textContent = 'High confidence diagnosis';
-        banner.classList.remove('confidence-low', 'hidden');
-        banner.classList.add('confidence-high');
-      } else {
-        banner.classList.remove('confidence-low', 'confidence-high');
-        banner.classList.add('hidden');
-      }
-
-      document.getElementById('result-diagnosis').textContent = r.diagnosis    ?? '—';
-      document.getElementById('result-cause').textContent     = r.likely_cause ?? '—';
-
-      const stepsEl = document.getElementById('result-steps');
-      stepsEl.replaceChildren();
-      (r.action_plan ?? []).slice(0, 5).forEach(item => {
-        const row = document.createElement('div');
-        row.className = 'step-row';
-        const num = document.createElement('span');
-        num.className   = 'step-num';
-        num.textContent = String(item.step);
-        row.appendChild(num);
-        const body = document.createElement('div');
-        body.style.flex = '1';
-        const action = document.createElement('div');
-        action.textContent = item.action;
-        body.appendChild(action);
-        if (item.tools_required?.length > 0) {
-          const tools = document.createElement('div');
-          tools.className = 'tools';
-          item.tools_required.forEach(t => {
-            const tag = document.createElement('span');
-            tag.className   = 'tool-tag';
-            tag.textContent = t;
-            tools.appendChild(tag);
-          });
-          body.appendChild(tools);
-        }
-        row.appendChild(body);
-        stepsEl.appendChild(row);
-      });
-
-      const warningsWrap = document.getElementById('result-warnings-wrap');
-      const warnings     = r.safety_warnings ?? [];
-      if (warnings.length > 0) {
-        const warningsEl = document.getElementById('result-warnings');
-        warningsEl.replaceChildren();
-        warnings.forEach(w => {
-          const tag = document.createElement('div');
-          tag.className   = 'warning-tag';
-          tag.textContent = '\u26a0 ' + w;
-          warningsEl.appendChild(tag);
-        });
-        warningsWrap.classList.remove('hidden');
-      } else {
-        warningsWrap.classList.add('hidden');
-      }
-
-      const notesWrap = document.getElementById('result-notes-wrap');
-      if (r.notes?.trim()) {
-        document.getElementById('result-notes').textContent = r.notes;
-        notesWrap.classList.remove('hidden');
-      } else {
-        notesWrap.classList.add('hidden');
-      }
-
-      // Reset voice panel state
-      document.getElementById('voice-panel').classList.add('hidden');
-      document.getElementById('btn-talk').classList.remove('hidden');
-
-      setState('result');
-    }
-
-    // ── Voice conversation ─────────────────────────────────────────
-
-    function buildSystemPrompt(r, speakFirst) {
-      const steps = (r.action_plan ?? []).map((s, i) => (i + 1) + '. ' + s.action).join('\n');
-      const warns = (r.safety_warnings ?? []).join('. ');
-
-      const identity =
-        'You are a master plumber with 25+ years of field experience, now acting as a voice assistant for a plumber on site. ' +
-        'You know European and French plumbing standards (DTU, NF), all pipe materials, fixture mechanics, and common failure modes. ' +
-        'Your tone is direct, practical, and collegial — like a trusted senior colleague on a job site, not a manual or a chatbot. ' +
-        'Use plain language. Be concise. When you name a part or tool, be specific (e.g. "22 mm spanner", "PTFE tape", "ball valve"). ' +
-        'If the plumber describes something that sounds dangerous — water near electrics, gas smell, suspected asbestos — stop and tell them clearly before anything else. ' +
-        'If a repair is beyond DIY scope (soldering, mains pressure work, gas), say so plainly and recommend they call a specialist.\n\n';
-
-      const context =
-        'CURRENT DIAGNOSIS FROM VIDEO ANALYSIS:\n' +
-        'Diagnosis: ' + r.diagnosis + '\n' +
-        'Likely cause: ' + r.likely_cause + '\n' +
-        'Action plan:\n' + steps + '\n' +
-        (warns ? 'Safety warnings: ' + warns + '\n' : '') +
-        (r.notes ? 'Additional notes: ' + r.notes + '\n' : '') + '\n';
-
-      const behaviour = speakFirst
-        ? 'BEHAVIOUR: The plumber just finished recording their video and is waiting for your assessment. ' +
-          'START SPEAKING IMMEDIATELY — do not wait for a question. ' +
-          'In 3–4 sentences: briefly acknowledge what you saw, state the diagnosis clearly, name the most important next action. ' +
-          'Then say something like "Let me know if you have questions or if anything is different on your end." ' +
-          'Keep the opening under 20 seconds of speech.'
-        : 'BEHAVIOUR: The plumber has already heard the diagnosis summary and is back with follow-up questions. ' +
-          'Answer what they ask — do not repeat the full diagnosis unless asked. ' +
-          'If they describe a variation from the original video (different pipe, different access), adapt your advice accordingly. ' +
-          'Suggest practical alternatives when the plumber says they lack a specific tool or part. ' +
-          'End each answer with a short confirmation like "does that help?" or "anything else on this?"';
-
-      return identity + context + behaviour;
-    }
-
-    async function connectWebRTC(systemPrompt, onEvent) {
-      const tokenRes = await fetch('/api/realtime-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemPrompt })
-      });
-      if (!tokenRes.ok) throw new Error('Session request failed (' + tokenRes.status + ')');
-      const sessionData  = await tokenRes.json();
-      const ephemeralKey = sessionData.client_secret?.value;
-      if (!ephemeralKey) throw new Error('No ephemeral key');
-
-      voicePc = new RTCPeerConnection();
-      const audioEl = document.getElementById('voice-audio');
-      voicePc.ontrack = e => { audioEl.srcObject = e.streams[0]; };
-
-      voiceMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      voiceMicStream.getTracks().forEach(t => voicePc.addTrack(t, voiceMicStream));
-
-      const dc = voicePc.createDataChannel('oai-events');
-      dc.onmessage = e => { try { onEvent(JSON.parse(e.data)); } catch (_) {} };
-
-      const offer = await voicePc.createOffer();
-      await voicePc.setLocalDescription(offer);
-
-      const sdpRes = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', {
-        method: 'POST',
-        body: offer.sdp,
-        headers: { Authorization: 'Bearer ' + ephemeralKey, 'Content-Type': 'application/sdp' }
-      });
-      if (!sdpRes.ok) throw new Error('WebRTC failed (' + sdpRes.status + ')');
-      await voicePc.setRemoteDescription({ type: 'answer', sdp: await sdpRes.text() });
-    }
-
-    // Called right after analysis — AI speaks the diagnosis first
-    async function startAutoVoice(r) {
-      setState('talking');
-      setTalkingState('connecting');
-
-      try {
-        await connectWebRTC(buildSystemPrompt(r, true), evt => {
-          if (evt.type === 'response.audio.delta')              setTalkingState('speaking');
-          else if (evt.type === 'response.done')                setTalkingState('listening');
-          else if (evt.type === 'input_audio_buffer.speech_started') setTalkingState('listening');
-        });
-        setTalkingState('speaking'); // AI will start speaking automatically
-      } catch (err) {
-        console.error('[voice auto]', err);
-        renderResult(r); // fallback: show text if voice fails
-      }
-    }
-
-    function setTalkingState(state) {
-      const dot   = document.getElementById('talking-dot');
-      const label = document.getElementById('talking-label');
-      dot.className = 'voice-dot ' + state;
-      if (state === 'connecting') label.textContent = 'Connecting...';
-      else if (state === 'speaking') label.textContent = 'AI is speaking...';
-      else if (state === 'listening') label.textContent = 'Listening — ask your question';
-    }
-
-    // Called from result state "Talk with AI" button — follow-up session
-    async function startFollowUpVoice(r) {
-      const btnTalk  = document.getElementById('btn-talk');
-      const panel    = document.getElementById('voice-panel');
-      btnTalk.disabled    = true;
-      btnTalk.textContent = 'Connecting...';
-
-      try {
-        await connectWebRTC(buildSystemPrompt(r, false), evt => {
-          if (evt.type === 'response.audio.delta')              setVoiceState('speaking');
-          else if (evt.type === 'response.done')                setVoiceState('listening');
-          else if (evt.type === 'input_audio_buffer.speech_started') setVoiceState('listening');
-        });
-        btnTalk.classList.add('hidden');
-        btnTalk.disabled    = false;
-        btnTalk.textContent = 'Talk with AI plumber →';
-        panel.classList.remove('hidden');
-        setVoiceState('listening');
-      } catch (err) {
-        console.error('[voice follow-up]', err);
-        btnTalk.disabled    = false;
-        btnTalk.textContent = 'Talk with AI plumber →';
-        endVoiceSession(false);
-      }
-    }
-
-    function setVoiceState(state) {
-      const dot   = document.getElementById('voice-dot');
-      const label = document.getElementById('voice-label');
-      dot.className = 'voice-dot ' + state;
-      if (state === 'listening') label.textContent = 'Listening — ask your question';
-      else if (state === 'speaking') label.textContent = 'AI is speaking...';
-      else label.textContent = 'Connecting...';
-    }
-
-    // showResult=true → go to result screen after cleanup (from talking state)
-    // showResult=false → stay on result screen, just close voice (from result state)
-    function endVoiceSession(showResult) {
-      if (voiceMicStream) { voiceMicStream.getTracks().forEach(t => t.stop()); voiceMicStream = null; }
-      if (voicePc)        { voicePc.close(); voicePc = null; }
-      const audioEl = document.getElementById('voice-audio');
-      if (audioEl) audioEl.srcObject = null;
-
-      if (showResult && lastResult) {
-        renderResult(lastResult);
-      } else {
-        // Reset voice panel in result state
-        document.getElementById('voice-panel')?.classList.add('hidden');
-        const btn = document.getElementById('btn-talk');
-        if (btn) { btn.classList.remove('hidden'); btn.disabled = false; btn.textContent = 'Talk with AI plumber →'; }
-      }
-    }
-
-    // ── Save diagnosis (silent, non-blocking) ─────────────────────
-    async function saveDiagnosis(r, firstFrameB64) {
-      try {
-        if (!_userId || !firstFrameB64) return;
-        const diagId = crypto.randomUUID();
-        const byteChars = atob(firstFrameB64);
-        const byteNums  = new Array(byteChars.length).fill(0).map((_, i) => byteChars.charCodeAt(i));
-        const blob = new Blob([new Uint8Array(byteNums)], { type: 'image/jpeg' });
-        const path = _userId + '/' + diagId + '.jpg';
-        await _supabase.storage.from('frames').upload(path, blob, { contentType: 'image/jpeg' });
-        const { data: { publicUrl } } = _supabase.storage.from('frames').getPublicUrl(path);
-        await _supabase.from('diagnoses').insert({
-          id: diagId,
-          user_id: _userId,
-          frame_url: publicUrl,
-          diagnosis:       r.diagnosis,
-          likely_cause:    r.likely_cause,
-          action_plan:     r.action_plan,
-          safety_warnings: r.safety_warnings,
-          confidence:      r.confidence,
-          notes:           r.notes
-        });
-      } catch (err) {
-        console.error('[saveDiagnosis] failed:', err.message, err);
-      }
-    }
+    // ── Session logic (implemented in Tasks 3–5) ───────────────────
+    async function startSession() { setState('connecting'); /* TODO */ }
+    function endSession() { setState('idle'); /* TODO */ }
   </script>
 </body>
 </html>
