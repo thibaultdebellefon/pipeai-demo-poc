@@ -344,6 +344,7 @@
 
         ws.onerror = () => {
           clearTimeout(setupTimeout);
+          ws.onclose = null;
           reject(new Error('WebSocket connection failed. Check your network and try again.'));
         };
 
