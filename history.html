@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0f1e">
+  <title>PipeAI — My Diagnoses</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0f1e; --surface: #111827; --border: #1f2937;
+      --accent: #f97316; --accent-dark: #c2410c;
+      --text: #f1f5f9; --muted: #94a3b8;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg); color: var(--text);
+      padding-bottom: 88px;
+      visibility: hidden;
+    }
+    header {
+      padding: 24px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 1.3rem; font-weight: 700; }
+    .list { padding: 0 0 16px; }
+    .row {
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .row-summary {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 20px;
+    }
+    .thumb {
+      width: 56px; height: 56px; border-radius: 10px;
+      object-fit: cover; background: var(--surface); flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+    .thumb-placeholder {
+      width: 56px; height: 56px; border-radius: 10px;
+      background: var(--surface); flex-shrink: 0;
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+    }
+    .meta { flex: 1; min-width: 0; }
+    .diag-text {
+      font-size: 0.9rem; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .date { font-size: 0.75rem; color: var(--muted); margin-top: 3px; }
+    .chevron { color: var(--muted); font-size: 0.9rem; transition: transform 0.2s; }
+    .row.expanded .chevron { transform: rotate(90deg); }
+    .detail {
+      display: none; padding: 0 20px 16px;
+    }
+    .row.expanded .detail { display: block; }
+    .detail-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .detail-section-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    .detail-body { font-size: 0.875rem; line-height: 1.6; }
+    .step-item { display: flex; gap: 10px; font-size: 0.875rem; line-height: 1.5; margin-bottom: 6px; }
+    .step-num { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+    .confidence {
+      display: inline-block; padding: 2px 10px;
+      border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+    }
+    .confidence-high { background: rgba(34,197,94,0.15); color: #86efac; }
+    .confidence-medium { background: rgba(234,179,8,0.15); color: #fde047; }
+    .confidence-low { background: rgba(239,68,68,0.15); color: #fca5a5; }
+    .empty {
+      text-align: center; padding: 80px 24px;
+      color: var(--muted); font-size: 0.95rem; line-height: 1.7;
+    }
+    .bottom-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 16px 20px;
+      background: var(--bg); border-top: 1px solid var(--border);
+    }
+    .btn-new {
+      display: block; width: 100%; max-width: 480px; margin: 0 auto;
+      padding: 16px 24px; background: var(--accent); color: white;
+      border: none; border-radius: 14px;
+      font-size: 1rem; font-weight: 700; font-family: inherit;
+      cursor: pointer; text-decoration: none; text-align: center;
+      transition: background 0.15s, transform 0.1s;
+      touch-action: manipulation;
+    }
+    .btn-new:hover { background: var(--accent-dark); }
+    .btn-new:active { transform: scale(0.97); }
+  </style>
+</head>
+<body>
+  <header><h1>My diagnoses</h1></header>
+  <div class="list" id="list"></div>
+  <div class="bottom-bar">
+    <a href="app.html" class="btn-new">New video →</a>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { window.location.href = 'login.html'; return; }
+      document.body.style.visibility = 'visible';
+      await loadHistory();
+    })();
+
+    function relativeDate(iso) {
+      const diff = Date.now() - new Date(iso).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'Just now';
+      if (mins < 60) return mins + ' min ago';
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return hours + ' hr ago';
+      const days = Math.floor(hours / 24);
+      if (days < 7) return days + ' day' + (days > 1 ? 's' : '') + ' ago';
+      return new Date(iso).toLocaleDateString();
+    }
+
+    function confidenceClass(c) {
+      if (c === 'high') return 'confidence-high';
+      if (c === 'low') return 'confidence-low';
+      return 'confidence-medium';
+    }
+
+    function buildRow(d) {
+      const row = document.createElement('div');
+      row.className = 'row';
+
+      const summary = document.createElement('div');
+      summary.className = 'row-summary';
+
+      if (d.frame_url) {
+        const img = document.createElement('img');
+        img.className = 'thumb';
+        img.src = d.frame_url;
+        img.alt = 'frame';
+        summary.appendChild(img);
+      } else {
+        const ph = document.createElement('div');
+        ph.className = 'thumb-placeholder';
+        ph.textContent = '🔧';
+        summary.appendChild(ph);
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+
+      const diagText = document.createElement('div');
+      diagText.className = 'diag-text';
+      diagText.textContent = d.diagnosis || 'Diagnosis';
+      meta.appendChild(diagText);
+
+      const dateEl = document.createElement('div');
+      dateEl.className = 'date';
+      dateEl.textContent = relativeDate(d.created_at);
+      meta.appendChild(dateEl);
+
+      summary.appendChild(meta);
+
+      const chevron = document.createElement('span');
+      chevron.className = 'chevron';
+      chevron.textContent = '›';
+      summary.appendChild(chevron);
+
+      row.appendChild(summary);
+
+      const detail = document.createElement('div');
+      detail.className = 'detail';
+
+      const card = document.createElement('div');
+      card.className = 'detail-card';
+
+      const dTitle = document.createElement('div');
+      dTitle.className = 'detail-section-title';
+      dTitle.textContent = 'Diagnosis';
+      card.appendChild(dTitle);
+      const dBody = document.createElement('div');
+      dBody.className = 'detail-body';
+      dBody.textContent = d.diagnosis || '';
+      card.appendChild(dBody);
+
+      if (d.likely_cause) {
+        const lcTitle = document.createElement('div');
+        lcTitle.className = 'detail-section-title';
+        lcTitle.textContent = 'Likely cause';
+        card.appendChild(lcTitle);
+        const lcBody = document.createElement('div');
+        lcBody.className = 'detail-body';
+        lcBody.textContent = d.likely_cause;
+        card.appendChild(lcBody);
+      }
+
+      const steps = Array.isArray(d.action_plan) ? d.action_plan : [];
+      if (steps.length) {
+        const apTitle = document.createElement('div');
+        apTitle.className = 'detail-section-title';
+        apTitle.textContent = 'Action plan';
+        card.appendChild(apTitle);
+        steps.forEach((s, i) => {
+          const item = document.createElement('div');
+          item.className = 'step-item';
+          const num = document.createElement('span');
+          num.className = 'step-num';
+          num.textContent = (i + 1) + '.';
+          item.appendChild(num);
+          const txt = document.createElement('span');
+          txt.textContent = s.action || s.step || JSON.stringify(s);
+          item.appendChild(txt);
+          card.appendChild(item);
+        });
+      }
+
+      const warnings = Array.isArray(d.safety_warnings) ? d.safety_warnings : [];
+      if (warnings.length) {
+        const swTitle = document.createElement('div');
+        swTitle.className = 'detail-section-title';
+        swTitle.textContent = 'Safety warnings';
+        card.appendChild(swTitle);
+        warnings.forEach(w => {
+          const wEl = document.createElement('div');
+          wEl.className = 'detail-body';
+          wEl.textContent = '⚠️ ' + (typeof w === 'string' ? w : JSON.stringify(w));
+          card.appendChild(wEl);
+        });
+      }
+
+      if (d.confidence) {
+        const confEl = document.createElement('span');
+        confEl.className = 'confidence ' + confidenceClass(d.confidence);
+        confEl.textContent = d.confidence + ' confidence';
+        card.appendChild(confEl);
+      }
+
+      if (d.notes) {
+        const nTitle = document.createElement('div');
+        nTitle.className = 'detail-section-title';
+        nTitle.textContent = 'Notes';
+        card.appendChild(nTitle);
+        const nBody = document.createElement('div');
+        nBody.className = 'detail-body';
+        nBody.textContent = d.notes;
+        card.appendChild(nBody);
+      }
+
+      detail.appendChild(card);
+      row.appendChild(detail);
+
+      summary.addEventListener('click', () => {
+        row.classList.toggle('expanded');
+      });
+
+      return row;
+    }
+
+    async function loadHistory() {
+      const list = document.getElementById('list');
+
+      const { data: diagnoses, error } = await sb
+        .from('diagnoses')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error || !diagnoses || diagnoses.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'No diagnoses yet. Tap New video to get started.';
+        list.appendChild(empty);
+        return;
+      }
+
+      diagnoses.forEach(d => {
+        list.appendChild(buildRow(d));
+      });
+    }
+  </script>
+</body>
+</html>
