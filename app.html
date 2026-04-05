@@ -469,7 +469,33 @@
       source.connect(workletNode);
     }
 
-    function startFrameCapture() { /* implemented in Task 5 */ }
+    function startFrameCapture() {
+      const video  = document.getElementById('camera-preview');
+      const canvas = document.createElement('canvas');
+      const ctx    = canvas.getContext('2d');
+
+      frameInterval = setInterval(() => {
+        if (ws?.readyState !== WebSocket.OPEN) return;
+        if (!video.videoWidth) return;
+
+        const scale   = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+        canvas.width  = Math.round(video.videoWidth  * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        const base64  = dataUrl.slice(dataUrl.indexOf(',') + 1);
+
+        ws.send(JSON.stringify({
+          realtime_input: {
+            media_chunks: [{
+              mime_type: 'image/jpeg',
+              data: base64
+            }]
+          }
+        }));
+      }, 1000); // 1 frame/s
+    }
 
     function queueAudio(base64Data) {
       audioQueue.push(base64Data);
