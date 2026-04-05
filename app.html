@@ -415,10 +415,99 @@
     }
 
     // ── Stubs for Tasks 4 & 5 (will be replaced) ─────────────────
-    async function setupAudioCapture() { /* implemented in Task 4 */ }
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let str = '';
+      for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i]);
+      return btoa(str);
+    }
+
+    async function setupAudioCapture() {
+      const processorCode = `
+        class PCMProcessor extends AudioWorkletProcessor {
+          process(inputs) {
+            const ch = inputs[0]?.[0];
+            if (ch) {
+              const pcm = new Int16Array(ch.length);
+              for (let i = 0; i < ch.length; i++) {
+                const s = Math.max(-1, Math.min(1, ch[i]));
+                pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+              }
+              this.port.postMessage(pcm.buffer, [pcm.buffer]);
+            }
+            return true;
+          }
+        }
+        registerProcessor('pcm-processor', PCMProcessor);
+      `;
+
+      const blob    = new Blob([processorCode], { type: 'application/javascript' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      audioCtxIn = new AudioContext({ sampleRate: 16000 });
+      await audioCtxIn.audioWorklet.addModule(blobUrl);
+      URL.revokeObjectURL(blobUrl);
+
+      const source = audioCtxIn.createMediaStreamSource(mediaStream);
+      workletNode  = new AudioWorkletNode(audioCtxIn, 'pcm-processor');
+
+      workletNode.port.onmessage = (e) => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            realtime_input: {
+              media_chunks: [{
+                mime_type: 'audio/pcm;rate=16000',
+                data: arrayBufferToBase64(e.data)
+              }]
+            }
+          }));
+        }
+      };
+
+      // Capture only — do NOT connect workletNode to destination (avoids echo)
+      source.connect(workletNode);
+    }
+
     function startFrameCapture() { /* implemented in Task 5 */ }
-    function queueAudio() {}
-    function stopAudioPlayback() {}
+
+    function queueAudio(base64Data) {
+      audioQueue.push(base64Data);
+      if (!isPlaying) playNextAudio();
+    }
+
+    function playNextAudio() {
+      if (audioQueue.length === 0) { isPlaying = false; return; }
+      isPlaying = true;
+
+      const base64  = audioQueue.shift();
+      const binary  = atob(base64);
+      const bytes   = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+      const int16   = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+
+      if (!audioCtxOut) audioCtxOut = new AudioContext({ sampleRate: 24000 });
+
+      const buffer  = audioCtxOut.createBuffer(1, float32.length, 24000);
+      buffer.copyToChannel(float32, 0);
+
+      currentSource = audioCtxOut.createBufferSource();
+      currentSource.buffer = buffer;
+      currentSource.connect(audioCtxOut.destination);
+      currentSource.onended = () => { currentSource = null; playNextAudio(); };
+      currentSource.start();
+    }
+
+    function stopAudioPlayback() {
+      audioQueue = [];
+      isPlaying  = false;
+      if (currentSource) {
+        try { currentSource.stop(); } catch (_) {}
+        currentSource = null;
+      }
+    }
   </script>
 </body>
 </html>
