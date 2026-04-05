@@ -445,6 +445,7 @@
       const blobUrl = URL.createObjectURL(blob);
 
       audioCtxIn = new AudioContext({ sampleRate: 16000 });
+      await audioCtxIn.resume();
       await audioCtxIn.audioWorklet.addModule(blobUrl);
       URL.revokeObjectURL(blobUrl);
 
@@ -496,7 +497,7 @@
       currentSource = audioCtxOut.createBufferSource();
       currentSource.buffer = buffer;
       currentSource.connect(audioCtxOut.destination);
-      currentSource.onended = () => { currentSource = null; playNextAudio(); };
+      currentSource.onended = () => { currentSource.buffer = null; currentSource = null; playNextAudio(); };
       currentSource.start();
     }
 
