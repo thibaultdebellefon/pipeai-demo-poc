@@ -299,7 +299,7 @@
     function connectGemini(apiKey) {
       return new Promise((resolve, reject) => {
         const url =
-          'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.' +
+          'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.' +
           'GenerativeService.BidiGenerateContent?key=' + apiKey;
 
         ws = new WebSocket(url);
@@ -314,7 +314,7 @@
         ws.onopen = () => {
           ws.send(JSON.stringify({
             setup: {
-              model: 'models/gemini-2.0-flash-exp',
+              model: 'models/gemini-2.0-flash-live-001',
               generation_config: {
                 response_modalities: ['AUDIO'],
                 speech_config: {
@@ -424,31 +424,10 @@
     }
 
     async function setupAudioCapture() {
-      const processorCode = `
-        class PCMProcessor extends AudioWorkletProcessor {
-          process(inputs) {
-            const ch = inputs[0]?.[0];
-            if (ch) {
-              const pcm = new Int16Array(ch.length);
-              for (let i = 0; i < ch.length; i++) {
-                const s = Math.max(-1, Math.min(1, ch[i]));
-                pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-              }
-              this.port.postMessage(pcm.buffer, [pcm.buffer]);
-            }
-            return true;
-          }
-        }
-        registerProcessor('pcm-processor', PCMProcessor);
-      `;
-
-      const blob    = new Blob([processorCode], { type: 'application/javascript' });
-      const blobUrl = URL.createObjectURL(blob);
-
+      // Use a static file instead of a Blob URL — iOS Safari hangs on addModule(blobUrl)
       audioCtxIn = new AudioContext({ sampleRate: 16000 });
       await audioCtxIn.resume();
-      await audioCtxIn.audioWorklet.addModule(blobUrl);
-      URL.revokeObjectURL(blobUrl);
+      await audioCtxIn.audioWorklet.addModule('/pcm-processor.js');
 
       const source = audioCtxIn.createMediaStreamSource(mediaStream);
       workletNode  = new AudioWorkletNode(audioCtxIn, 'pcm-processor');
