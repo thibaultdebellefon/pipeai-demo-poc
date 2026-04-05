@@ -164,7 +164,7 @@
       border-radius: 12px; padding: 20px; text-align: center;
       max-width: 360px; width: 100%;
     }
-    #error-message { color: #fca5a5; font-size: 0.95rem; line-height: 1.5; }
+    #error-message { color: #fca5a5; font-size: 0.95rem; line-height: 1.5; word-break: break-word; }
   </style>
 </head>
 <body style="visibility:hidden">
@@ -228,9 +228,196 @@
     document.getElementById('btn-end').addEventListener('click', endSession);
     document.getElementById('btn-retry').addEventListener('click', () => setState('idle'));
 
-    // ── Session logic (implemented in Tasks 3–5) ───────────────────
-    async function startSession() { setState('connecting'); /* TODO */ }
-    function endSession() { setState('idle'); /* TODO */ }
+    // ── Session state ──────────────────────────────────────────────
+    let mediaStream    = null;
+    let audioCtxIn     = null;   // 16 kHz AudioContext for mic input
+    let audioCtxOut    = null;   // 24 kHz AudioContext for AI output
+    let workletNode    = null;
+    let ws             = null;
+    let frameInterval  = null;
+    let audioQueue     = [];
+    let isPlaying      = false;
+    let currentSource  = null;
+
+    // ── System prompt ──────────────────────────────────────────────
+    const SYSTEM_PROMPT =
+      'You are a master plumber with 25+ years of field experience in residential and commercial plumbing, ' +
+      'specialising in European and French installations (DTU regulations, NF standards). ' +
+      'You are on a live video call with a plumber who is showing you their problem. ' +
+      'You can see their camera feed and hear them speak. ' +
+      'When the session starts, greet them briefly (one sentence) and ask them to show or describe the problem. ' +
+      'As you watch the video, proactively name what you see — pipe material, joint type, visible damage — without waiting to be asked. ' +
+      'Your tone is direct, practical, and collegial — a trusted senior colleague on the job site, not a manual or a chatbot. ' +
+      'Use plain language. Be concise. Name parts and tools specifically (e.g. "22 mm spanner", "PTFE tape"). ' +
+      'If you spot anything dangerous — water near electrics, gas smell, suspected asbestos — say so immediately and clearly. ' +
+      'If a repair is beyond DIY scope, say so and recommend a specialist.';
+
+    // ── Start session ──────────────────────────────────────────────
+    async function startSession() {
+      setState('connecting');
+      try {
+        // 1. Camera + mic
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true
+        });
+        document.getElementById('camera-preview').srcObject = mediaStream;
+
+        // 2. Gemini API key from server
+        const keyRes = await fetch('/api/gemini-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (!keyRes.ok) throw new Error('Could not reach server (' + keyRes.status + ')');
+        const { apiKey } = await keyRes.json();
+        if (!apiKey) throw new Error('No API key returned');
+
+        // 3. Connect WebSocket (resolves when setupComplete received)
+        await connectGemini(apiKey);
+
+        // 4. Audio capture (added in Task 4)
+        await setupAudioCapture();
+
+        // 5. Video frames (added in Task 5)
+        startFrameCapture();
+
+        setState('active');
+        setOrbState('listening');
+        setStatus('Listening...');
+
+      } catch (err) {
+        cleanup();
+        const msg =
+          err.name === 'NotAllowedError'
+            ? 'Camera and microphone access required. Allow access in browser settings, then try again.'
+            : err.message || 'Connection failed. Check your network and try again.';
+        showError(msg);
+      }
+    }
+
+    // ── Connect to Gemini Live ─────────────────────────────────────
+    function connectGemini(apiKey) {
+      return new Promise((resolve, reject) => {
+        const url =
+          'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.' +
+          'GenerativeService.BidiGenerateContent?key=' + apiKey;
+
+        ws = new WebSocket(url);
+
+        // 10-second timeout for setup
+        const setupTimeout = setTimeout(() => {
+          ws.close();
+          reject(new Error('Connection timed out. Check your network and try again.'));
+        }, 10000);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            setup: {
+              model: 'models/gemini-2.0-flash-exp',
+              generation_config: {
+                response_modalities: ['AUDIO'],
+                speech_config: {
+                  voice_config: {
+                    prebuilt_voice_config: { voice_name: 'Puck' }
+                  }
+                }
+              },
+              system_instruction: {
+                parts: [{ text: SYSTEM_PROMPT }]
+              }
+            }
+          }));
+        };
+
+        ws.onmessage = (e) => {
+          let msg;
+          try { msg = JSON.parse(e.data); } catch (_) { return; }
+
+          if (msg.setupComplete) {
+            clearTimeout(setupTimeout);
+            resolve();
+            return;
+          }
+          handleGeminiMessage(msg);
+        };
+
+        ws.onerror = () => {
+          clearTimeout(setupTimeout);
+          reject(new Error('WebSocket connection failed. Check your network and try again.'));
+        };
+
+        ws.onclose = () => {
+          clearTimeout(setupTimeout);
+          if (document.getElementById('state-active').classList.contains('active')) {
+            cleanup();
+            showError('Connection lost. Please try again.');
+          }
+        };
+      });
+    }
+
+    // ── Handle incoming Gemini messages ───────────────────────────
+    function handleGeminiMessage(msg) {
+      const content = msg.serverContent;
+      if (!content) return;
+
+      if (content.interrupted) {
+        stopAudioPlayback();
+        setOrbState('listening');
+        setStatus('Listening...');
+        return;
+      }
+
+      if (content.modelTurn?.parts) {
+        for (const part of content.modelTurn.parts) {
+          if (part.inlineData?.mimeType?.startsWith('audio/pcm')) {
+            queueAudio(part.inlineData.data);
+            setOrbState('speaking');
+            setStatus('AI is speaking...');
+          }
+        }
+      }
+
+      if (content.turnComplete) {
+        setOrbState('listening');
+        setStatus('Listening...');
+      }
+    }
+
+    // ── Orb & status helpers ──────────────────────────────────────
+    function setOrbState(state) {
+      document.getElementById('ai-orb').className = state;
+    }
+
+    function setStatus(text) {
+      document.getElementById('status-label').textContent = text;
+    }
+
+    // ── End session ────────────────────────────────────────────────
+    function endSession() {
+      cleanup();
+      setState('idle');
+    }
+
+    function cleanup() {
+      clearInterval(frameInterval); frameInterval = null;
+
+      if (ws)          { ws.onclose = null; ws.close(); ws = null; }
+      if (workletNode) { try { workletNode.disconnect(); } catch (_) {} workletNode = null; }
+      if (audioCtxIn)  { audioCtxIn.close().catch(() => {}); audioCtxIn = null; }
+      if (audioCtxOut) { audioCtxOut.close().catch(() => {}); audioCtxOut = null; }
+      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+
+      audioQueue = [];
+      isPlaying  = false;
+      if (currentSource) { try { currentSource.stop(); } catch (_) {} currentSource = null; }
+    }
+
+    // ── Stubs for Tasks 4 & 5 (will be replaced) ─────────────────
+    async function setupAudioCapture() { /* implemented in Task 4 */ }
+    function startFrameCapture() { /* implemented in Task 5 */ }
+    function queueAudio() {}
+    function stopAudioPlayback() {}
   </script>
 </body>
 </html>
