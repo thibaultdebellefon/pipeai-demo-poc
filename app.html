@@ -180,7 +180,7 @@
   <!-- CONNECTING -->
   <div id="state-connecting" class="state">
     <div class="spinner"></div>
-    <p style="color:var(--muted);font-size:0.9rem;">Connecting...</p>
+    <p id="connect-step" style="color:var(--muted);font-size:0.9rem;">Starting...</p>
   </div>
 
   <!-- ACTIVE -->
@@ -253,34 +253,37 @@
       'If a repair is beyond DIY scope, say so and recommend a specialist.';
 
     // ── Start session ──────────────────────────────────────────────
+    function setStep(text) {
+      const el = document.getElementById('connect-step');
+      if (el) el.textContent = text;
+    }
+
     async function startSession() {
       setState('connecting');
       try {
-        // 1. Camera + mic
+        setStep('1/4 Camera access...');
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: true
         });
         document.getElementById('camera-preview').srcObject = mediaStream;
 
-        // 2. Gemini API key from server
+        setStep('2/4 Fetching key...');
         const keyRes = await fetch('/api/gemini-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
-        if (!keyRes.ok) throw new Error('Could not reach server (' + keyRes.status + ')');
+        if (!keyRes.ok) throw new Error('Server error ' + keyRes.status + ' — check GEMINI_API_KEY on Vercel');
         const { apiKey } = await keyRes.json();
-        if (!apiKey) throw new Error('No API key returned');
+        if (!apiKey) throw new Error('No API key returned from server');
 
-        // 3. Connect WebSocket (resolves when setupComplete received)
+        setStep('3/4 Connecting to Gemini...');
         await connectGemini(apiKey);
 
-        // 4. Audio capture (added in Task 4)
+        setStep('4/4 Setting up audio...');
         await setupAudioCapture();
 
-        // 5. Video frames (added in Task 5)
         startFrameCapture();
-
         setState('active');
         setOrbState('listening');
         setStatus('Listening...');
@@ -339,20 +342,30 @@
             resolve();
             return;
           }
+          // Surface Gemini API errors (bad key, quota, wrong model, etc.)
+          if (msg.error) {
+            clearTimeout(setupTimeout);
+            ws.onclose = null;
+            reject(new Error('Gemini error ' + msg.error.code + ': ' + msg.error.message));
+            return;
+          }
           handleGeminiMessage(msg);
         };
 
         ws.onerror = () => {
           clearTimeout(setupTimeout);
           ws.onclose = null;
-          reject(new Error('WebSocket connection failed. Check your network and try again.'));
+          reject(new Error('WebSocket failed — check network or API key'));
         };
 
-        ws.onclose = () => {
+        ws.onclose = (e) => {
           clearTimeout(setupTimeout);
           if (document.getElementById('state-active').classList.contains('active')) {
             cleanup();
             showError('Connection lost. Please try again.');
+          } else {
+            // Closed during setup — reject so catch block shows the error
+            reject(new Error('Connection closed during setup (code ' + e.code + '). Check API key and try again.'));
           }
         };
       });
